@@ -25,7 +25,6 @@ async function supabaseFetch(env, path, options = {}) {
     Prefer: "return=representation",
     ...(options.headers || {})
   };
-
   return fetch(`${baseUrl}${path}`, { ...options, headers });
 }
 
@@ -41,7 +40,6 @@ async function getLoggedUser(env, request) {
       Authorization: `Bearer ${token}`
     }
   });
-
   if (!res.ok) return null;
   return res.json();
 }
@@ -50,16 +48,13 @@ async function assertAdmin(env, request) {
   const user = await getLoggedUser(env, request);
   if (!user?.id) return { ok: false, response: json({ error: "Sessão inválida. Faça login novamente." }, 401) };
 
-  const res = await supabaseFetch(env, `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=id,role&limit=1`, {
-    method: "GET"
-  });
+  const res = await supabaseFetch(env, `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=id,role&limit=1`, { method: "GET" });
   const rows = await res.json().catch(() => []);
   const profile = Array.isArray(rows) ? rows[0] : null;
 
   if (!profile || profile.role !== "admin") {
     return { ok: false, response: json({ error: "Acesso negado. Apenas administrador pode executar esta ação." }, 403) };
   }
-
   return { ok: true, user };
 }
 
@@ -70,9 +65,7 @@ export async function onRequestOptions() {
 export async function onRequestPost({ request, env }) {
   try {
     const missing = requiredEnv(env);
-    if (missing.length) {
-      return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
-    }
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
 
     const admin = await assertAdmin(env, request);
     if (!admin.ok) return admin.response;
@@ -87,14 +80,9 @@ export async function onRequestPost({ request, env }) {
     if (!nome || !email || !password || !condominio_id) {
       return json({ error: "Preencha nome, e-mail, senha e condomínio do morador." }, 400);
     }
+    if (password.length < 6) return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
 
-    if (password.length < 6) {
-      return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
-    }
-
-    const profileByEmailRes = await supabaseFetch(env, `/rest/v1/profiles?email=eq.${encodeURIComponent(email)}&select=id,email&limit=1`, {
-      method: "GET"
-    });
+    const profileByEmailRes = await supabaseFetch(env, `/rest/v1/profiles?email=eq.${encodeURIComponent(email)}&select=id,email&limit=1`, { method: "GET" });
     const existingProfiles = await profileByEmailRes.json().catch(() => []);
     if (Array.isArray(existingProfiles) && existingProfiles.length) {
       return json({ error: "Já existe um morador cadastrado com este e-mail. Remova o cadastro antigo antes de criar novamente." }, 409);
@@ -106,7 +94,15 @@ export async function onRequestPost({ request, env }) {
         email,
         password,
         email_confirm: true,
-        user_metadata: { nome, role: "morador", unidade, condominio_id }
+        user_metadata: {
+          nome,
+          role: "morador",
+          unidade,
+          condominio_id,
+          cpf: body?.cpf || null,
+          celular: body?.celular || null,
+          placa_veiculo: body?.placa_veiculo || null
+        }
       })
     });
 
@@ -125,7 +121,14 @@ export async function onRequestPost({ request, env }) {
       email,
       role: "morador",
       unidade,
-      condominio_id
+      condominio_id,
+      cpf: body?.cpf || null,
+      celular: body?.celular || null,
+      email_contato: body?.email_contato || null,
+      moradores_junto: Array.isArray(body?.moradores_junto) ? body.moradores_junto : [],
+      placa_veiculo: body?.placa_veiculo || null,
+      foto_url: body?.foto_url || null,
+      ativo: true
     };
 
     const profileRes = await supabaseFetch(env, "/rest/v1/profiles", {
