@@ -50,7 +50,20 @@ function bindBasicEvents() {
   $("formRemoverCondominio")?.addEventListener("submit", removerCondominio);
   $("formRemoverMorador")?.addEventListener("submit", removerMorador);
   $("formRemoverLancamento")?.addEventListener("submit", removerLancamento);
+  $("senhaCondominio")?.addEventListener("change", popularMoradoresPorCondominio);
+  $("formAlterarSenhaMorador")?.addEventListener("submit", alterarSenhaMorador);
+  $("addMoradorExtra")?.addEventListener("click", adicionarLinhaMoradorExtra);
+  $("moradoresExtrasList")?.addEventListener("click", (e) => { if (e.target?.classList?.contains("remove-extra")) e.target.closest(".repeat-row")?.remove(); });
+  $("relatorioCondominio")?.addEventListener("change", renderMoradoresRelatorio);
+  $("buscaPlaca")?.addEventListener("input", renderMoradoresRelatorio);
+  $("exportMoradoresPdf")?.addEventListener("click", exportarMoradoresPdf);
+  $("exportMoradoresCsv")?.addEventListener("click", exportarMoradoresCsv);
+  $("backupPortalBtn")?.addEventListener("click", exportarBackupPortal);
+  bindFileName("moradorFoto", "moradorFotoNome");
+  bindFileName("logoCondominioRelatorio", "logoCondominioRelatorioNome");
+  bindFileName("logoDmRelatorio", "logoDmRelatorioNome");
 }
+
 
 function requireConfig() {
   if (
@@ -119,10 +132,12 @@ function popularSelects() {
     `<option value="">Selecione o condomínio</option>` +
     condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome || c.name || "Condomínio")}</option>`).join("");
 
-  ["loginCondominio", "moradorCondominio", "lanCondominio", "removerCondominio"].forEach(id => {
+  ["loginCondominio", "moradorCondominio", "lanCondominio", "removerCondominio", "senhaCondominio", "relatorioCondominio"].forEach(id => {
     const el = $(id);
     if (el) el.innerHTML = options;
   });
+
+  popularMoradoresPorCondominio();
 }
 
 async function loginMorador() {
@@ -264,6 +279,8 @@ async function carregarMoradores() {
   }
 
   popularMoradores();
+  popularMoradoresPorCondominio();
+  renderMoradoresRelatorio();
 }
 
 function popularMoradores() {
@@ -452,16 +469,29 @@ async function criarMorador(e) {
   e.preventDefault();
   msg($("adminMsg"), "");
 
+  const moradoresJunto = Array.from(document.querySelectorAll(".morador-extra-nome"))
+    .map(input => input.value.trim())
+    .filter(Boolean);
+
+  const condominioId = $("moradorCondominio")?.value || "";
+  const fotoUrl = await uploadFile($("moradorFoto")?.files?.[0], `condominios/${condominioId}/moradores`);
+
   const payload = {
     nome: $("moradorNome")?.value?.trim() || "",
+    cpf: $("moradorCpf")?.value?.trim() || "",
+    celular: $("moradorCelular")?.value?.trim() || "",
+    email_contato: $("moradorEmailOpcional")?.value?.trim() || "",
     email: $("moradorEmail")?.value?.trim() || "",
     password: $("moradorSenha")?.value || "",
+    moradores_junto: moradoresJunto,
+    placa_veiculo: normalizarPlaca($("moradorPlaca")?.value || ""),
+    foto_url: fotoUrl,
     unidade: $("moradorUnidade")?.value?.trim() || "",
-    condominio_id: $("moradorCondominio")?.value || ""
+    condominio_id: condominioId
   };
 
-  if (!payload.nome || !payload.email || !payload.password || !payload.condominio_id) {
-    msg($("adminMsg"), "Preencha nome, e-mail, senha e condomínio do morador.", "error");
+  if (!payload.nome || !payload.cpf || !payload.celular || !payload.email || !payload.password || !payload.unidade || !payload.condominio_id) {
+    msg($("adminMsg"), "Preencha nome, CPF, celular, e-mail de acesso, senha, unidade e condomínio do morador.", "error");
     return;
   }
 
@@ -481,6 +511,9 @@ async function criarMorador(e) {
   if (!res.ok) return msg($("adminMsg"), result.error || "Erro ao criar morador.", "error");
 
   e.target.reset();
+  resetMoradoresExtras();
+  const fotoNome = $("moradorFotoNome");
+  if (fotoNome) fotoNome.textContent = "Nenhuma foto selecionada";
   await carregarMoradores();
   msg($("adminMsg"), "Morador criado/recriado com login de acesso.", "ok");
 }
@@ -708,5 +741,181 @@ async function removerLancamento(e) {
   }
 }
 
+
+
+function popularMoradoresPorCondominio() {
+  const condominioId = $("senhaCondominio")?.value || "";
+  const selectMorador = $("senhaMorador");
+  if (!selectMorador) return;
+
+  if (!condominioId) {
+    selectMorador.innerHTML = `<option value="">Selecione primeiro o condomínio</option>`;
+    return;
+  }
+
+  const filtrados = moradores.filter(m => m.condominio_id === condominioId);
+
+  if (!filtrados.length) {
+    selectMorador.innerHTML = `<option value="">Nenhum morador cadastrado neste condomínio</option>`;
+    return;
+  }
+
+  selectMorador.innerHTML =
+    `<option value="">Selecione o morador</option>` +
+    filtrados.map(m => {
+      const unidade = m.unidade ? ` - Unidade ${m.unidade}` : "";
+      const nome = m.nome || m.email || "Morador";
+      return `<option value="${m.id}">${escapeHtml(nome + unidade + " - " + (m.email || ""))}</option>`;
+    }).join("");
+}
+
+async function alterarSenhaMorador(e) {
+  e.preventDefault();
+  msg($("adminMsg"), "");
+
+  const userId = $("senhaMorador")?.value || "";
+  const novaSenha = $("novaSenhaMorador")?.value || "";
+
+  if (!userId) {
+    msg($("adminMsg"), "Selecione o morador que terá a senha alterada.", "error");
+    return;
+  }
+
+  if (!novaSenha || novaSenha.length < 6) {
+    msg($("adminMsg"), "A nova senha precisa ter pelo menos 6 caracteres.", "error");
+    return;
+  }
+
+  try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    const res = await fetch("/api/update-user-password", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ user_id: userId, password: novaSenha })
+    });
+
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.error || "Erro ao alterar senha do morador.");
+
+    $("novaSenhaMorador").value = "";
+    msg($("adminMsg"), "Senha do morador alterada com sucesso.", "ok");
+  } catch (err) {
+    msg($("adminMsg"), "Erro ao alterar senha: " + err.message, "error");
+  }
+}
+
+
+function normalizarPlaca(valor = "") {
+  return String(valor).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function bindFileName(inputId, labelId) {
+  const input = $(inputId);
+  const label = $(labelId);
+  if (!input || !label) return;
+  input.addEventListener("change", () => {
+    label.textContent = input.files?.[0]?.name || "Nenhum arquivo selecionado";
+  });
+}
+
+function adicionarLinhaMoradorExtra() {
+  const box = $("moradoresExtrasList");
+  if (!box) return;
+  const row = document.createElement("div");
+  row.className = "repeat-row";
+  row.innerHTML = `<input class="morador-extra-nome" placeholder="Nome de outro morador" /><button type="button" class="btn btn-light btn-small remove-extra">Remover</button>`;
+  box.appendChild(row);
+}
+
+function resetMoradoresExtras() {
+  const box = $("moradoresExtrasList");
+  if (!box) return;
+  box.innerHTML = `<div class="repeat-row"><input class="morador-extra-nome" placeholder="Nome de outro morador" /><button type="button" class="btn btn-light btn-small remove-extra">Remover</button></div>`;
+}
+
+function getMoradoresFiltradosRelatorio() {
+  const condominioId = $("relatorioCondominio")?.value || "";
+  const placa = normalizarPlaca($("buscaPlaca")?.value || "");
+  let itens = moradores.filter(m => !condominioId || m.condominio_id === condominioId);
+  if (placa) itens = itens.filter(m => normalizarPlaca(m.placa_veiculo || "").includes(placa));
+  return itens;
+}
+
+function nomeCondominio(id) {
+  return condominios.find(c => c.id === id)?.nome || "-";
+}
+
+function moradoresJuntoTexto(m) {
+  const v = m.moradores_junto;
+  if (Array.isArray(v)) return v.join(", ");
+  if (typeof v === "string") {
+    try { const parsed = JSON.parse(v); if (Array.isArray(parsed)) return parsed.join(", "); } catch (_) {}
+    return v;
+  }
+  return "";
+}
+
+function renderMoradoresRelatorio() {
+  const wrap = $("moradoresRelatorioLista");
+  const resumo = $("moradoresRelatorioResumo");
+  if (!wrap || !resumo) return;
+  const itens = getMoradoresFiltradosRelatorio();
+  const condominioId = $("relatorioCondominio")?.value || "";
+  const titulo = condominioId ? nomeCondominio(condominioId) : "Todos os condomínios";
+  resumo.textContent = `${titulo}: ${itens.length} morador(es) encontrado(s).`;
+  if (!itens.length) { wrap.innerHTML = `<p class="hint">Nenhum morador encontrado para o filtro selecionado.</p>`; return; }
+  wrap.innerHTML = `<table class="residents-table"><thead><tr><th>Responsável</th><th>CPF</th><th>Celular</th><th>E-mail acesso</th><th>Unidade</th><th>Condomínio</th><th>Placa</th><th>Moradores vinculados</th></tr></thead><tbody>${itens.map(m => `<tr><td>${escapeHtml(m.nome || "")}</td><td>${escapeHtml(m.cpf || "")}</td><td>${escapeHtml(m.celular || "")}</td><td>${escapeHtml(m.email || "")}</td><td>${escapeHtml(m.unidade || "")}</td><td>${escapeHtml(nomeCondominio(m.condominio_id))}</td><td>${escapeHtml(m.placa_veiculo || "")}</td><td>${escapeHtml(moradoresJuntoTexto(m) || "-")}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function csvEscape(v) { return `"${String(v ?? "").replaceAll('"', '""')}"`; }
+
+function downloadText(filename, text, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportarMoradoresCsv() {
+  const itens = getMoradoresFiltradosRelatorio();
+  if (!itens.length) return msg($("adminMsg"), "Nenhum morador para exportar.", "error");
+  const header = ["Condominio","Responsavel","CPF","Celular","Email opcional","Email acesso","Unidade","Placa veiculo","Moradores vinculados","Foto"];
+  const rows = itens.map(m => [nomeCondominio(m.condominio_id), m.nome, m.cpf, m.celular, m.email_contato, m.email, m.unidade, m.placa_veiculo, moradoresJuntoTexto(m), m.foto_url].map(csvEscape).join(";"));
+  downloadText(`relatorio-moradores-${new Date().toISOString().slice(0,10)}.csv`, [header.join(";"), ...rows].join("\n"), "text/csv;charset=utf-8");
+}
+
+function fileToDataUrl(file) {
+  return new Promise(resolve => {
+    if (!file) return resolve("");
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result || "");
+    reader.onerror = () => resolve("");
+    reader.readAsDataURL(file);
+  });
+}
+
+async function exportarMoradoresPdf() {
+  const itens = getMoradoresFiltradosRelatorio();
+  if (!itens.length) return msg($("adminMsg"), "Nenhum morador para gerar PDF.", "error");
+  const logoCond = await fileToDataUrl($("logoCondominioRelatorio")?.files?.[0]);
+  const logoDm = await fileToDataUrl($("logoDmRelatorio")?.files?.[0]);
+  const condominioId = $("relatorioCondominio")?.value || "";
+  const titulo = condominioId ? nomeCondominio(condominioId) : "Todos os condomínios";
+  const rows = itens.map(m => `<tr><td>${escapeHtml(nomeCondominio(m.condominio_id))}</td><td>${escapeHtml(m.nome || "")}</td><td>${escapeHtml(m.cpf || "")}</td><td>${escapeHtml(m.celular || "")}</td><td>${escapeHtml(m.email || "")}</td><td>${escapeHtml(m.unidade || "")}</td><td>${escapeHtml(m.placa_veiculo || "-")}</td><td>${escapeHtml(moradoresJuntoTexto(m) || "-")}</td></tr>`).join("");
+  const win = window.open("", "_blank");
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Relatório de Moradores</title><style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#102033;margin:0}.header{display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg,#061d38,#0c3974);color:#fff;padding:18px 22px;border-radius:18px;margin-bottom:14px}.logos{display:flex;gap:12px;align-items:center}.logos img{max-height:58px;max-width:110px;background:#fff;border-radius:12px;padding:6px}.title h1{margin:0;font-size:24px}.title p{margin:6px 0 0;color:#dbeafe}.summary{display:flex;gap:12px;margin:10px 0 14px}.box{background:#f1f5f9;border-left:5px solid #e5b037;padding:10px 14px;border-radius:10px;font-weight:700}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#e5b037;color:#061d38;text-align:left;padding:8px;border:1px solid #d6a52f}td{padding:7px;border:1px solid #d8e1ef;vertical-align:top}tr:nth-child(even) td{background:#f8fbff}.footer{margin-top:12px;font-size:10px;color:#64748b}</style></head><body><div class="header"><div class="title"><h1>Relatório de Moradores</h1><p>${escapeHtml(titulo)} • DM Gestão Patrimonial</p></div><div class="logos">${logoCond ? `<img src="${logoCond}">` : ""}${logoDm ? `<img src="${logoDm}">` : ""}</div></div><div class="summary"><div class="box">Total de moradores: ${itens.length}</div><div class="box">Gerado em: ${new Date().toLocaleDateString("pt-BR")}</div></div><table><thead><tr><th>Condomínio</th><th>Responsável</th><th>CPF</th><th>Celular</th><th>E-mail acesso</th><th>Unidade</th><th>Placa</th><th>Moradores vinculados</th></tr></thead><tbody>${rows}</tbody></table><div class="footer">Relatório gerado pelo Portal de Transparência DM.</div><script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
+  win.document.close();
+}
+
+function exportarBackupPortal() {
+  const backup = { gerado_em: new Date().toISOString(), condominios, moradores, lancamentos };
+  downloadText(`backup-portal-dm-${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(backup, null, 2), "application/json;charset=utf-8");
+}
 
 document.addEventListener("DOMContentLoaded", init);
