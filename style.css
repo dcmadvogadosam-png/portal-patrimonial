@@ -263,594 +263,201 @@
   border: 1px solid #dce6f3;
 }
 
-
-
-/* Alterar senha de morador */
-.senha-card {
-  background: #f7fbff !important;
-  border-color: #cfe0f5 !important;
+/* Página inicial premium - Portal de Transparência */
+body {
+  min-height: 100vh;
+  background: #eef4fb;
 }
 
-.senha-card label {
-  display: block;
-  font-weight: 800;
-  margin: 10px 0 6px;
-  color: #102033;
+.topbar {
+  background: rgba(6, 29, 56, .86) !important;
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(255,255,255,.16);
 }
 
-.resident-card label,.residents-tools-card label{display:block;font-weight:800;color:#14345c;margin:3px 0 7px}.repeat-list{display:grid;gap:10px;margin-bottom:10px}.repeat-row{display:grid;grid-template-columns:1fr auto;gap:10px}.btn-small{padding:10px 12px;border-radius:12px;font-size:.88rem}.top-gap{margin-top:12px}.action-row{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}.report-summary{background:#eef4ff;border-left:5px solid #0c3974;padding:12px 14px;border-radius:12px;font-weight:800;margin:12px 0}.residents-table-wrap{overflow:auto;border:1px solid #dbe5f2;border-radius:16px;background:#fff}.residents-table{width:100%;border-collapse:collapse;min-width:980px}.residents-table th{background:#0c3974;color:#fff;text-align:left;padding:11px;font-size:.85rem}.residents-table td{padding:10px;border-bottom:1px solid #e7edf6;font-size:.88rem;vertical-align:top}.residents-table tr:nth-child(even) td{background:#f8fbff}.resident-photo{margin-bottom:12px}
-@media(max-width:800px){.repeat-row{grid-template-columns:1fr}.action-row .btn{width:100%}}
-
-/* ==========================================================
-   PAINEL ADMINISTRATIVO ULTRA PREMIUM - DM Gestão Patrimonial
-   Organização real dos módulos internos do painel administrativo
-   ========================================================== */
-#adminPanel.admin-panel {
-  max-width: 1480px !important;
-  width: calc(100vw - 80px) !important;
-  margin: 34px auto !important;
-  padding: 34px !important;
-  border-radius: 34px !important;
-  background:
-    radial-gradient(circle at top left, rgba(229,176,55,.16), transparent 28%),
-    linear-gradient(180deg, #ffffff 0%, #f7fbff 100%) !important;
-  border: 1px solid rgba(12,57,116,.10) !important;
-  box-shadow: 0 28px 80px rgba(6,29,56,.14) !important;
+.brand-mark {
+  background: linear-gradient(135deg, #f8d06a, #c99522) !important;
+  box-shadow: 0 10px 26px rgba(229,176,55,.32);
 }
 
-#adminPanel .panel-title {
-  display: flex !important;
-  align-items: flex-start !important;
-  justify-content: space-between !important;
-  gap: 18px !important;
-  padding: 6px 4px 22px !important;
-  border-bottom: 1px solid #e4edf8 !important;
-  margin-bottom: 24px !important;
-}
-
-#adminPanel .panel-title h3 {
-  font-size: clamp(1.55rem, 2.5vw, 2.15rem) !important;
-  letter-spacing: -.04em !important;
-  color: #061d38 !important;
-  margin: 0 0 6px !important;
-}
-
-#adminPanel .panel-title p {
-  color: #64748b !important;
-  font-weight: 600 !important;
-  margin: 0 !important;
-}
-
-#adminPanel .admin-grid {
+.login-wrap {
+  position: relative;
+  min-height: calc(100vh - 88px) !important;
   display: grid !important;
-  grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
-  gap: 22px !important;
-  align-items: stretch !important;
-  margin-top: 0 !important;
+  grid-template-columns: minmax(280px, 620px) minmax(320px, 480px);
+  align-items: center;
+  justify-content: center;
+  gap: clamp(24px, 5vw, 72px);
+  padding: clamp(28px, 5vw, 70px) clamp(18px, 6vw, 90px) !important;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgba(4,18,35,.84), rgba(7,35,68,.64) 42%, rgba(248,250,252,.34)),
+    url("assets/condominio-bg.svg") center/cover no-repeat !important;
 }
 
-#adminPanel .form-card {
-  position: relative !important;
-  overflow: hidden !important;
-  min-width: 0 !important;
-  padding: 24px !important;
-  border-radius: 26px !important;
-  background: rgba(255,255,255,.88) !important;
-  border: 1px solid rgba(148,163,184,.28) !important;
-  box-shadow: 0 18px 45px rgba(15,23,42,.07) !important;
-  backdrop-filter: blur(12px) !important;
-}
-
-#adminPanel .form-card::before {
+.login-wrap::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 5px;
-  background: linear-gradient(90deg, #0c3974, #1d4ed8, #e5b037);
-}
-
-#adminPanel .danger-card::before {
-  background: linear-gradient(90deg, #991b1b, #dc2626, #f59e0b) !important;
-}
-
-#adminPanel .form-card h4 {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  margin: 0 0 14px !important;
-  font-size: 1.15rem !important;
-  line-height: 1.2 !important;
-  letter-spacing: -.02em !important;
-  color: #061d38 !important;
-}
-
-#adminPanel .form-card h4::before {
-  content: "";
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #0c3974, #1d4ed8);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 8px 18px rgba(30,64,175,.18);
-}
-
-#adminPanel .danger-card h4::before {
-  background: linear-gradient(135deg, #991b1b, #dc2626) !important;
-}
-
-#adminPanel .hint {
-  color: #64748b !important;
-  line-height: 1.55 !important;
-  font-size: .92rem !important;
-  margin: 0 0 16px !important;
-}
-
-#adminPanel label {
-  display: block !important;
-  font-size: .84rem !important;
-  font-weight: 900 !important;
-  color: #334155 !important;
-  margin: 0 0 8px !important;
-}
-
-#adminPanel input,
-#adminPanel select,
-#adminPanel textarea {
-  width: 100% !important;
-  min-height: 48px !important;
-  border-radius: 16px !important;
-  border: 1px solid #d7e3f2 !important;
-  background: #ffffff !important;
-  padding: 13px 15px !important;
-  font-size: .94rem !important;
-  color: #102033 !important;
-  box-shadow: 0 1px 0 rgba(15,23,42,.02) !important;
-  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease !important;
-}
-
-#adminPanel input:focus,
-#adminPanel select:focus,
-#adminPanel textarea:focus {
-  border-color: #1d4ed8 !important;
-  box-shadow: 0 0 0 4px rgba(29,78,216,.12) !important;
-  transform: translateY(-1px) !important;
-}
-
-#adminPanel textarea {
-  min-height: 130px !important;
-}
-
-#adminPanel .two {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 16px !important;
-}
-
-#adminPanel .top-gap {
-  margin-top: 14px !important;
-}
-
-#adminPanel .btn {
-  min-height: 48px !important;
-  border-radius: 16px !important;
-  font-weight: 900 !important;
-  letter-spacing: -.01em !important;
-}
-
-#adminPanel .btn-primary {
-  background: linear-gradient(135deg, #0c3974, #1558ad) !important;
-  box-shadow: 0 14px 26px rgba(12,57,116,.22) !important;
-}
-
-#adminPanel .btn-danger {
-  background: linear-gradient(135deg, #991b1b, #c0261d) !important;
-  box-shadow: 0 14px 26px rgba(153,27,27,.20) !important;
-}
-
-#adminPanel .btn-light {
-  background: #ffffff !important;
-  border: 1px solid #dbeafe !important;
-  color: #0c3974 !important;
-}
-
-#formCondominio,
-#formRemoverCondominio,
-#formRemoverMorador {
-  grid-column: span 4 !important;
-}
-
-#formMorador.resident-card {
-  grid-column: 1 / -1 !important;
+  inset: 0;
   background:
-    linear-gradient(135deg, rgba(12,57,116,.04), rgba(229,176,55,.07)),
-    #ffffff !important;
-  border: 1px solid rgba(12,57,116,.14) !important;
+    radial-gradient(circle at 12% 12%, rgba(229,176,55,.32), transparent 32%),
+    radial-gradient(circle at 88% 18%, rgba(255,255,255,.24), transparent 28%),
+    linear-gradient(180deg, rgba(3,10,24,.05), rgba(3,10,24,.45));
+  pointer-events: none;
 }
 
-#formMorador.resident-card .two {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+.login-hero,
+.login-card {
+  position: relative;
+  z-index: 1;
 }
 
-#formMorador .repeat-list {
-  display: grid !important;
-  gap: 10px !important;
-  margin-bottom: 10px !important;
+.login-hero {
+  color: #fff;
+  max-width: 650px;
+  text-shadow: 0 8px 30px rgba(0,0,0,.22);
 }
 
-#formMorador .repeat-row {
-  display: grid !important;
-  grid-template-columns: 1fr auto !important;
-  gap: 10px !important;
-  align-items: center !important;
+.hero-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+  backdrop-filter: blur(12px);
+  font-weight: 900;
+  letter-spacing: .03em;
 }
 
-#formMorador .btn-small {
-  min-height: 42px !important;
-  padding: 10px 14px !important;
-  white-space: nowrap !important;
+.login-hero h2 {
+  max-width: 680px;
+  margin: 22px 0 16px;
+  font-size: clamp(2.3rem, 6vw, 5rem);
+  line-height: .94;
+  letter-spacing: -.055em;
 }
 
-#formAlterarSenhaMorador {
-  grid-column: span 6 !important;
+.login-hero p {
+  max-width: 570px;
+  margin: 0;
+  font-size: clamp(1rem, 2vw, 1.22rem);
+  line-height: 1.65;
+  color: rgba(255,255,255,.88);
 }
 
-#formLancamento {
-  grid-column: span 6 !important;
+.hero-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
 }
 
-#formRemoverLancamento {
-  grid-column: span 6 !important;
+.hero-highlights span {
+  padding: 11px 14px;
+  border-radius: 999px;
+  color: #f8fafc;
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.18);
+  backdrop-filter: blur(10px);
+  font-weight: 800;
+  font-size: .92rem;
 }
 
-#adminPanel .residents-tools-card {
-  grid-column: 1 / -1 !important;
-  background:
-    radial-gradient(circle at top right, rgba(229,176,55,.14), transparent 28%),
-    linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+.login-card {
+  width: min(480px, 100%) !important;
+  padding: clamp(26px, 4vw, 42px) !important;
+  border-radius: 32px !important;
+  background: rgba(255,255,255,.90) !important;
+  border: 1px solid rgba(255,255,255,.62) !important;
+  box-shadow: 0 32px 90px rgba(2, 12, 27, .34) !important;
+  backdrop-filter: blur(22px);
 }
 
-#adminPanel .action-row {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 12px !important;
-  margin: 16px 0 !important;
-}
-
-#adminPanel .action-row .btn {
-  width: auto !important;
-  flex: 1 1 220px !important;
-}
-
-#adminPanel .custom-upload {
-  border: 1px dashed #9db8df !important;
-  border-radius: 18px !important;
-  background: #f8fbff !important;
-  padding: 16px !important;
-}
-
-#adminPanel .upload-title {
-  color: #061d38 !important;
-  font-weight: 900 !important;
-}
-
-#adminPanel .upload-button {
-  background: linear-gradient(135deg, #0c3974, #1558ad) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 10px 22px rgba(12,57,116,.18) !important;
-}
-
-#adminPanel .report-summary,
-#adminPanel .residents-table-wrap {
-  border-radius: 18px !important;
-  background: #f8fbff !important;
-  border: 1px solid #dbeafe !important;
-  padding: 16px !important;
-  overflow: auto !important;
-}
-
-@media (max-width: 1180px) {
-  #adminPanel {
-    width: calc(100vw - 44px) !important;
-    padding: 24px !important;
-  }
-
-  #adminPanel .admin-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
-  }
-
-  #formCondominio,
-  #formRemoverCondominio,
-  #formRemoverMorador,
-  #formAlterarSenhaMorador,
-  #formLancamento,
-  #formRemoverLancamento {
-    grid-column: span 6 !important;
-  }
-}
-
-@media (max-width: 760px) {
-  #adminPanel {
-    width: calc(100vw - 24px) !important;
-    padding: 18px !important;
-    border-radius: 24px !important;
-  }
-
-  #adminPanel .panel-title {
-    display: block !important;
-  }
-
-  #adminPanel .admin-grid,
-  #adminPanel .two,
-  #formMorador.resident-card .two,
-  #formMorador .repeat-row {
-    grid-template-columns: 1fr !important;
-  }
-
-  #adminPanel .form-card,
-  #formCondominio,
-  #formRemoverCondominio,
-  #formRemoverMorador,
-  #formAlterarSenhaMorador,
-  #formLancamento,
-  #formRemoverLancamento,
-  #formMorador.resident-card,
-  #adminPanel .residents-tools-card {
-    grid-column: 1 / -1 !important;
-  }
-}
-
-/* =========================================================
-   LAYOUT ADMINISTRATIVO COM MENU LATERAL - VERSÃO PREMIUM
-   ========================================================= */
-#adminPanel.admin-premium-shell {
-  width: min(1560px, calc(100vw - 56px)) !important;
-  max-width: 1560px !important;
-  margin: 34px auto !important;
-  padding: 28px !important;
-  border-radius: 30px !important;
-  background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(248,251,255,.96)) !important;
-  border: 1px solid rgba(12,57,116,.12) !important;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, .12) !important;
-  overflow: visible !important;
-}
-
-#adminPanel .premium-title {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  padding: 4px 4px 22px !important;
-  margin: 0 !important;
-}
-
-#adminPanel .admin-eyebrow {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  background: #eaf2ff !important;
-  color: #0c3974 !important;
-  border: 1px solid #cfe0ff !important;
-  border-radius: 999px !important;
-  padding: 7px 12px !important;
-  font-size: .78rem !important;
-  font-weight: 900 !important;
-  margin-bottom: 10px !important;
-}
-
-#adminPanel .premium-title h3 {
-  font-size: clamp(1.65rem, 2vw, 2.4rem) !important;
-  margin: 0 0 6px !important;
-  letter-spacing: -.04em !important;
-  color: #071b34 !important;
-}
-
-#adminPanel .premium-title p {
-  margin: 0 !important;
-  color: #64748b !important;
-  font-size: 1rem !important;
-}
-
-#adminPanel .admin-workspace {
-  display: grid !important;
-  grid-template-columns: 285px minmax(0, 1fr) !important;
-  gap: 24px !important;
-  align-items: start !important;
-}
-
-#adminPanel .admin-sidebar {
-  position: sticky !important;
-  top: 110px !important;
-  background: linear-gradient(180deg, #082a54 0%, #0c3974 100%) !important;
-  border-radius: 24px !important;
-  padding: 16px !important;
-  box-shadow: 0 22px 42px rgba(12, 57, 116, .24) !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-}
-
-#adminPanel .admin-menu-btn {
-  width: 100% !important;
-  min-height: 54px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: flex-start !important;
-  gap: 10px !important;
-  padding: 13px 16px !important;
-  margin-bottom: 10px !important;
-  border-radius: 16px !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  background: rgba(255,255,255,.08) !important;
-  color: #eef6ff !important;
-  font-weight: 900 !important;
-  text-align: left !important;
-  box-shadow: none !important;
-  cursor: pointer !important;
-}
-
-#adminPanel .admin-menu-btn:hover,
-#adminPanel .admin-menu-btn.active {
-  background: linear-gradient(135deg, #ffffff, #eef6ff) !important;
-  color: #0c3974 !important;
-  transform: translateX(3px) !important;
-  box-shadow: 0 14px 30px rgba(0,0,0,.18) !important;
-}
-
-#adminPanel .admin-content {
-  min-width: 0 !important;
-  background: #ffffff !important;
-  border-radius: 26px !important;
-  border: 1px solid #dbeafe !important;
-  padding: 26px !important;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.85) !important;
-}
-
-#adminPanel .admin-tab-panel {
-  display: none !important;
-  animation: adminFade .22s ease !important;
-}
-
-#adminPanel .admin-tab-panel.active {
-  display: block !important;
-}
-
-@keyframes adminFade {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-#adminPanel .admin-section-head {
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: flex-start !important;
-  gap: 16px !important;
-  margin-bottom: 22px !important;
-  padding-bottom: 18px !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-}
-
-#adminPanel .admin-section-head h4 {
-  margin: 0 0 6px !important;
-  font-size: 1.45rem !important;
-  color: #071b34 !important;
-  letter-spacing: -.03em !important;
-}
-
-#adminPanel .admin-section-head p {
-  margin: 0 !important;
-  color: #64748b !important;
-}
-
-#adminPanel .admin-cards.two-columns {
-  display: grid !important;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  gap: 22px !important;
-}
-
-#adminPanel .form-card,
-#adminPanel .full-card {
-  width: 100% !important;
-  max-width: none !important;
-  min-height: auto !important;
-  grid-column: auto !important;
-  padding: 24px !important;
-  border-radius: 24px !important;
-  background: linear-gradient(180deg, #ffffff 0%, #f9fbff 100%) !important;
-  border: 1px solid #dbeafe !important;
-  box-shadow: 0 16px 40px rgba(12, 57, 116, .08) !important;
-}
-
-#adminPanel .resident-card {
-  padding: 28px !important;
-}
-
-#adminPanel .form-section-title {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  margin: 8px 0 16px !important;
-  padding: 12px 14px !important;
-  border-radius: 16px !important;
+.login-card .pill {
   background: linear-gradient(135deg, #eaf2ff, #fff7df) !important;
-  color: #0c3974 !important;
+  color: #092b58 !important;
+  border: 1px solid rgba(12,57,116,.12);
+}
+
+.login-card h2 {
+  margin: 16px 0 10px !important;
+  font-size: clamp(1.75rem, 4vw, 2.55rem) !important;
+  letter-spacing: -.04em;
+  color: #071f3f;
+}
+
+.login-card p {
+  color: #526175 !important;
+}
+
+.login-card label {
+  color: #0f2745;
   font-weight: 900 !important;
-  border: 1px solid rgba(12,57,116,.10) !important;
 }
 
-#adminPanel .two,
-#adminPanel .three {
-  display: grid !important;
-  gap: 18px !important;
-  align-items: start !important;
+.login-card input,
+.login-card select {
+  min-height: 50px;
+  border-radius: 16px !important;
+  border: 1px solid rgba(12,57,116,.16) !important;
+  background: rgba(255,255,255,.86) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 8px 24px rgba(15, 39, 69, .06);
+  transition: .2s ease;
 }
 
-#adminPanel .two { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-#adminPanel .three { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
-
-#adminPanel input,
-#adminPanel select,
-#adminPanel textarea {
-  min-width: 0 !important;
-  width: 100% !important;
-  font-size: .96rem !important;
+.login-card input:focus,
+.login-card select:focus {
+  border-color: #c99522 !important;
+  box-shadow: 0 0 0 4px rgba(229,176,55,.18), 0 10px 26px rgba(15,39,69,.08);
 }
 
-#adminPanel .large-upload {
-  margin: 18px 0 !important;
+.login-card .btn-primary {
+  min-height: 52px;
+  border-radius: 17px !important;
+  background: linear-gradient(135deg, #092b58, #0d4388) !important;
+  box-shadow: 0 16px 34px rgba(12,57,116,.28);
 }
 
-#adminPanel .large-action {
-  width: min(420px, 100%) !important;
-  margin-top: 8px !important;
+.login-card .btn-primary:hover {
+  background: linear-gradient(135deg, #071f3f, #0c3974) !important;
 }
 
-#adminPanel .repeat-row {
-  grid-template-columns: minmax(0, 1fr) auto !important;
+.admin-note {
+  background: rgba(255, 247, 223, .8) !important;
+  border-left-color: #c99522 !important;
+  border: 1px solid rgba(229,176,55,.28);
 }
 
-#adminPanel .residents-tools-card,
-#adminPanel .senha-card {
-  margin-top: 22px !important;
-}
-
-#adminPanel .residents-table-wrap {
-  max-height: 460px !important;
-}
-
-@media (max-width: 1180px) {
-  #adminPanel.admin-premium-shell {
-    width: calc(100vw - 28px) !important;
-    padding: 18px !important;
-  }
-  #adminPanel .admin-workspace {
+@media (max-width: 980px) {
+  .login-wrap {
     grid-template-columns: 1fr !important;
+    justify-items: center;
   }
-  #adminPanel .admin-sidebar {
-    position: static !important;
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 10px !important;
+  .login-hero {
+    text-align: center;
   }
-  #adminPanel .admin-menu-btn {
-    margin-bottom: 0 !important;
+  .login-hero p {
+    margin-inline: auto;
   }
-  #adminPanel .three {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  .hero-highlights {
+    justify-content: center;
   }
 }
 
-@media (max-width: 760px) {
-  #adminPanel.admin-premium-shell {
-    width: calc(100vw - 18px) !important;
-    padding: 14px !important;
-    border-radius: 22px !important;
+@media (max-width: 560px) {
+  .login-wrap {
+    padding: 28px 14px 42px !important;
   }
-  #adminPanel .admin-content {
-    padding: 16px !important;
-    border-radius: 20px !important;
+  .login-hero h2 {
+    font-size: 2.35rem;
   }
-  #adminPanel .admin-sidebar,
-  #adminPanel .admin-cards.two-columns,
-  #adminPanel .two,
-  #adminPanel .three,
-  #adminPanel .repeat-row {
-    grid-template-columns: 1fr !important;
+  .hero-highlights span {
+    width: 100%;
+    text-align: center;
+  }
+  .login-card {
+    border-radius: 24px !important;
   }
 }
