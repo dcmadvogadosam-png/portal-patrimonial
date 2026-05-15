@@ -53,7 +53,7 @@
   <div id="app">
     <header class="topbar">
       <div class="brand">
-        <div class="brand-mark">DM</div>
+        <div class="brand-mark"><img src="logo_dm.png" alt="DM" onerror="this.style.display='none'; this.parentElement.textContent='DM';"></div>
         <div>
           <h1>Portal de Transparência</h1>
           <p>DM Gestão Patrimonial</p>
@@ -121,13 +121,31 @@
         </div>
 
 
-        <div id="adminPanel" class="admin-panel hidden">
-          <div class="panel-title">
-            <h3>Painel Administrativo</h3>
-            <p>Cadastre condomínios, moradores, logins e lançamentos completos.</p>
+        <div id="adminPanel" class="admin-panel premium-admin hidden">
+          <div class="central-header">
+            <div>
+              <span class="pill">Painel Administrativo</span>
+              <h3>Central de Gestão DM</h3>
+              <p>Gerencie condomínios, moradores, relatórios, backups e lançamentos em áreas separadas.</p>
+            </div>
           </div>
 
-          <div class="admin-grid">
+          <div class="admin-layout">
+            <aside class="admin-sidebar">
+              <button type="button" class="admin-nav-item active">🏢 Condomínios</button>
+              <button type="button" class="admin-nav-item">👥 Moradores</button>
+              <button type="button" class="admin-nav-item">📄 Relatórios e Backup</button>
+              <button type="button" class="admin-nav-item">💰 Lançamentos</button>
+              <button type="button" class="admin-nav-item">🗑️ Remoções</button>
+            </aside>
+
+            <div class="admin-content">
+              <div class="panel-title">
+                <h4>Condomínios</h4>
+                <p>Cadastre e organize os condomínios atendidos pela DM Gestão Patrimonial.</p>
+              </div>
+
+              <div class="admin-grid">
             <form id="formCondominio" class="form-card">
               <h4>Novo condomínio</h4>
               <input id="condNome" placeholder="Nome do condomínio" required />
@@ -192,6 +210,9 @@
               <button class="btn btn-danger" type="submit">Remover lançamento</button>
             </form>
 
+          </div>
+              </div>
+            </div>
           </div>
           <p id="adminMsg" class="message"></p>
         </div>
