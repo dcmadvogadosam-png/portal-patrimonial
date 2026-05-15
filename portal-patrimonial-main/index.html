@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal de Transparência | DM Gestão Patrimonial</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div id="app">
+    <section id="loginScreen" class="login-screen">
+      <div class="login-bg"></div>
+      <div class="login-shell">
+        <div class="login-brand">
+          <div class="dm-logo"><img src="logo_dm.png" alt="DM" onerror="this.remove(); this.parentElement.textContent='DM';"></div>
+          <div>
+            <h1>Portal de Transparência</h1>
+            <p>DM Gestão Patrimonial</p>
+          </div>
+        </div>
+
+        <div class="login-grid">
+          <div class="login-copy">
+            <span class="eyebrow">Acesso seguro</span>
+            <h2>Gestão patrimonial com transparência, controle e elegância.</h2>
+            <p>Moradores acompanham despesas e documentos. Administradores gerenciam condomínios, moradores, lançamentos e relatórios em um painel premium.</p>
+            <div class="login-highlights">
+              <span>🏢 Condomínios</span><span>👥 Moradores</span><span>📊 Relatórios</span><span>🔐 Supabase</span>
+            </div>
+          </div>
+
+          <div class="auth-card">
+            <div class="tabs-login">
+              <button id="tabMorador" class="active" type="button">Morador</button>
+              <button id="tabAdmin" type="button">Administrador</button>
+            </div>
+
+            <div id="moradorLoginBox">
+              <h3>Entrar no portal</h3>
+              <p>Selecione o condomínio e informe seus dados de acesso.</p>
+              <label>Condomínio</label>
+              <select id="loginCondominio"></select>
+              <label>E-mail</label>
+              <input id="loginEmail" type="email" placeholder="seuemail@exemplo.com" />
+              <label>Senha</label>
+              <input id="loginSenha" type="password" placeholder="Digite sua senha" />
+              <button id="loginBtn" class="btn btn-primary full">Entrar como morador</button>
+              <p id="loginMsg" class="message"></p>
+            </div>
+
+            <div id="adminLoginBox" class="hidden">
+              <h3>Área administrativa</h3>
+              <p>Acesso exclusivo para administradores cadastrados no Supabase.</p>
+              <label>E-mail do administrador</label>
+              <input id="adminEmail" type="email" placeholder="dm@dmpatrimonial.com" />
+              <label>Senha</label>
+              <input id="adminSenha" type="password" placeholder="Digite a senha" />
+              <button id="adminLoginBtn" class="btn btn-primary full">Entrar no painel administrativo</button>
+              <p id="adminLoginMsg" class="message"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dashboardScreen" class="hidden app-shell">
+      <aside id="adminSidebar" class="sidebar hidden">
+        <div class="side-brand">
+          <div class="dm-logo small"><img src="logo_dm.png" alt="DM" onerror="this.remove(); this.parentElement.textContent='DM';"></div>
+          <div>
+            <h2>Portal de Transparência</h2>
+            <p>DM Gestão Patrimonial</p>
+          </div>
+        </div>
+
+        <div class="side-section-title">Painel Administrativo</div>
+        <nav class="side-nav">
+          <button class="nav-item active" data-admin-tab="condominios" type="button">🏢 <span>Condomínios</span></button>
+          <button class="nav-item" data-admin-tab="moradores" type="button">👥 <span>Moradores</span></button>
+          <button class="nav-item" data-admin-tab="relatorios" type="button">📄 <span>Relatórios e Backup</span></button>
+          <button class="nav-item" data-admin-tab="lancamentos" type="button">💰 <span>Lançamentos</span></button>
+          <button class="nav-item" data-admin-tab="remocoes" type="button">🗑️ <span>Remoções</span></button>
+        </nav>
+
+        <div class="secure-box">
+          <div>🛡️</div>
+          <strong>Sistema seguro</strong>
+          <p>Dados protegidos com autenticação e regras RLS do Supabase.</p>
+        </div>
+        <footer>© 2026 DM Gestão Patrimonial<br>Todos os direitos reservados.</footer>
+      </aside>
+
+      <main class="main-panel">
+        <header class="admin-topbar">
+          <button id="mobileMenuBtn" class="icon-btn" type="button">☰</button>
+          <div id="residentTitle" class="resident-title">
+            <span class="eyebrow">Prestação de contas digital</span>
+            <h2 id="condominioTitulo">Condomínio</h2>
+            <p id="userRoleLabel">Visualização segura</p>
+          </div>
+          <div class="user-box">
+            <div class="avatar">👤</div>
+            <div>
+              <strong id="sessionLabel">Usuário</strong>
+              <span id="sessionRole">Administrador</span>
+            </div>
+            <button id="logoutBtn" class="btn btn-logout" type="button">Sair ↪</button>
+          </div>
+        </header>
+
+        <section class="metrics-grid">
+          <article class="metric-card"><div class="metric-icon blue">🏢</div><div><span>Condomínios</span><strong id="metricCondominios">0</strong><small>Cadastrados</small></div></article>
+          <article class="metric-card"><div class="metric-icon green">👥</div><div><span>Moradores</span><strong id="metricMoradores">0</strong><small>Cadastrados</small></div></article>
+          <article class="metric-card"><div class="metric-icon money">$</div><div><span>Receitas (Mês)</span><strong id="totalReceitas">R$ 0,00</strong><small>Total arrecadado</small></div></article>
+          <article class="metric-card"><div class="metric-icon red">↓</div><div><span>Despesas (Mês)</span><strong id="totalDespesas">R$ 0,00</strong><small>Total registrado</small></div></article>
+          <article class="metric-card"><div class="metric-icon purple">▤</div><div><span>Registros</span><strong id="totalRegistros">0</strong><small>Lançamentos</small></div></article>
+          <span id="saldoAtual" class="hidden">R$ 0,00</span>
+        </section>
+
+        <section id="adminPanel" class="admin-dashboard hidden">
+          <div class="admin-hero">
+            <span class="pill">Painel Administrativo</span>
+            <h1>Central de Gestão DM</h1>
+            <p>Gerencie condomínios, moradores, relatórios, backups e lançamentos em áreas separadas.</p>
+          </div>
+
+          <section class="module-card admin-tab-panel" data-panel="condominios">
+            <div class="module-head">
+              <div><h2>🏢 Condomínios</h2><p>Cadastre e organize os condomínios atendidos pela DM Gestão Patrimonial.</p></div>
+              <div class="search-box"><input id="buscaCondominio" placeholder="Buscar condomínio..."><span>⌕</span></div>
+            </div>
+            <div class="cards-two">
+              <form id="formCondominio" class="action-card accent-blue">
+                <h3><span>＋</span>Novo condomínio</h3>
+                <input id="condNome" placeholder="Nome do condomínio" required />
+                <input id="condEndereco" placeholder="Endereço / referência" />
+                <button class="btn btn-primary" type="submit">🏢 Cadastrar condomínio</button>
+              </form>
+              <form id="formRemoverCondominio" class="action-card accent-red">
+                <h3><span>🗑️</span>Remover condomínio</h3>
+                <p>Selecione um condomínio para remover.</p>
+                <select id="removerCondominio" required></select>
+                <button class="btn btn-danger" type="submit">🗑️ Remover condomínio</button>
+              </form>
+            </div>
+            <div class="table-card">
+              <h3>Condomínios cadastrados</h3>
+              <div class="table-wrap"><table><thead><tr><th>Nome do condomínio</th><th>Endereço / Referência</th><th>Moradores</th><th>Data cadastro</th><th>Ações</th></tr></thead><tbody id="condominiosTable"></tbody></table></div>
+            </div>
+          </section>
+
+          <section class="module-card admin-tab-panel hidden" data-panel="moradores">
+            <div class="module-head"><div><h2>👥 Moradores</h2><p>Cadastre moradores e crie o login vinculado ao condomínio.</p></div><div class="search-box"><input id="buscaMorador" placeholder="Buscar morador..."><span>⌕</span></div></div>
+            <form id="formMorador" class="form-grid action-card accent-blue">
+              <input id="moradorNome" placeholder="Nome do morador" required />
+              <input id="moradorEmail" type="email" placeholder="E-mail de acesso" required />
+              <input id="moradorSenha" type="text" placeholder="Senha inicial" required />
+              <input id="moradorUnidade" placeholder="Apartamento / unidade" />
+              <input id="moradorCpf" placeholder="CPF" />
+              <input id="moradorCelular" placeholder="Celular" />
+              <input id="moradorPlaca" placeholder="Placa do veículo" />
+              <label class="file-field span-2 optional-upload">
+                <span>📷 Foto da placa do veículo <small>(opcional)</small></span>
+                <input id="moradorFotoPlaca" type="file" accept="image/*" />
+                <em id="moradorFotoPlacaNome">Nenhuma imagem selecionada</em>
+              </label>
+              <select id="moradorCondominio" required></select>
+              <button class="btn btn-primary span-2" type="submit">👤 Criar acesso do morador</button>
+            </form>
+            <div class="table-card"><h3>Moradores cadastrados</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Unidade</th><th>Condomínio</th><th>Placa</th><th>Foto</th><th>Status</th></tr></thead><tbody id="moradoresTable"></tbody></table></div></div>
+          </section>
+
+          <section class="module-card admin-tab-panel hidden" data-panel="relatorios">
+            <div class="module-head"><div><h2>📄 Relatórios e Backup</h2><p>Exporte dados do portal e gere relatórios rápidos para conferência.</p></div></div>
+            <div class="report-grid">
+              <button id="exportCsvBtn" class="report-card" type="button">📊 <strong>Exportar lançamentos CSV</strong><span>Planilha compatível com Excel.</span></button>
+              <button id="backupJsonBtn" class="report-card" type="button">💾 <strong>Gerar backup JSON</strong><span>Condomínios, moradores e lançamentos.</span></button>
+              <button id="printBtn" class="report-card" type="button">🖨️ <strong>Imprimir / PDF</strong><span>Relatório visual da tela atual.</span></button>
+            </div>
+          </section>
+
+          <section class="module-card admin-tab-panel hidden" data-panel="lancamentos">
+            <div class="module-head"><div><h2>💰 Lançamentos</h2><p>Registre despesas, receitas, justificativas e anexos dos condomínios.</p></div></div>
+            <form id="formLancamento" class="action-card accent-blue launch-form">
+              <div class="form-grid">
+                <select id="lanCondominio" required></select>
+                <select id="lanTipo"><option value="despesa">Despesa</option><option value="receita">Receita</option></select>
+                <input id="lanData" type="date" required />
+                <input id="lanValor" type="number" step="0.01" placeholder="Valor" required />
+                <input id="lanCategoria" placeholder="Categoria: Energia, Água, Manutenção..." />
+                <input id="lanLocal" placeholder="Local: Bloco A, garagem, cano..." />
+                <textarea id="lanJustificativa" class="span-2" placeholder="Justificativa / motivo do pagamento ou serviço"></textarea>
+                <label class="upload span-2"><span>📎 Selecionar imagem/anexo</span><input id="lanAnexo" type="file" accept="image/*,.pdf" /><small id="lanAnexoNome">Nenhum arquivo selecionado</small></label>
+                <button class="btn btn-primary span-2" type="submit">💾 Salvar lançamento</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="module-card admin-tab-panel hidden" data-panel="remocoes">
+            <div class="module-head"><div><h2>🗑️ Remoções</h2><p>Remova moradores e lançamentos cadastrados no sistema.</p></div></div>
+            <div class="cards-two">
+              <form id="formRemoverMorador" class="action-card accent-red"><h3>Remover morador</h3><select id="removerMorador" required></select><button class="btn btn-danger" type="submit">Remover morador</button></form>
+              <form id="formRemoverLancamento" class="action-card accent-red"><h3>Remover lançamento</h3><select id="removerLancamento" required></select><button class="btn btn-danger" type="submit">Remover lançamento</button></form>
+            </div>
+          </section>
+          <p id="adminMsg" class="message admin-message"></p>
+        </section>
+
+        <section id="recordsSection" class="records-section">
+          <div class="section-row">
+            <div><h2>Lançamentos e documentos</h2><p>Consulte despesas, receitas, comprovantes e justificativas.</p></div>
+            <div class="filters"><select id="filterTipo"><option value="">Todos</option><option value="despesa">Despesas</option><option value="receita">Receitas</option></select><input id="filterBusca" placeholder="Buscar por categoria, descrição ou condomínio" /></div>
+          </div>
+          <div id="recordsList" class="records-list"></div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-card">
+      <button id="closeDetail" class="modal-close">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
