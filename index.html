@@ -121,147 +121,77 @@
         </div>
 
 
-        <div id="adminPanel" class="admin-panel hidden admin-premium-shell">
-          <div class="panel-title premium-title">
-            <div>
-              <span class="admin-eyebrow">Painel Administrativo</span>
-              <h3>Central de Gestão DM</h3>
-              <p>Gerencie condomínios, moradores, relatórios, backups e lançamentos em áreas separadas.</p>
-            </div>
+        <div id="adminPanel" class="admin-panel hidden">
+          <div class="panel-title">
+            <h3>Painel Administrativo</h3>
+            <p>Cadastre condomínios, moradores, logins e lançamentos completos.</p>
           </div>
 
-          <div class="admin-workspace">
-            <aside class="admin-sidebar" aria-label="Menu do painel administrativo">
-              <button type="button" class="admin-menu-btn active" data-admin-tab="condominios">🏢 Condomínios</button>
-              <button type="button" class="admin-menu-btn" data-admin-tab="moradores">👥 Moradores</button>
-              <button type="button" class="admin-menu-btn" data-admin-tab="relatorios">📄 Relatórios e backup</button>
-              <button type="button" class="admin-menu-btn" data-admin-tab="lancamentos">💰 Lançamentos</button>
-              <button type="button" class="admin-menu-btn" data-admin-tab="remocoes">🗑️ Remoções</button>
-            </aside>
+          <div class="admin-grid">
+            <form id="formCondominio" class="form-card">
+              <h4>Novo condomínio</h4>
+              <input id="condNome" placeholder="Nome do condomínio" required />
+              <input id="condEndereco" placeholder="Endereço / referência" />
+              <button class="btn btn-primary" type="submit">Cadastrar condomínio</button>
+            </form>
 
-            <div class="admin-content">
-              <section class="admin-tab-panel active" data-admin-panel="condominios">
-                <div class="admin-section-head">
-                  <div><h4>Condomínios</h4><p>Cadastre e organize os condomínios atendidos pela DM Gestão Patrimonial.</p></div>
-                </div>
-                <div class="admin-cards two-columns">
-                  <form id="formCondominio" class="form-card">
-                    <h4>Novo condomínio</h4>
-                    <input id="condNome" placeholder="Nome do condomínio" required />
-                    <input id="condEndereco" placeholder="Endereço / referência" />
-                    <button class="btn btn-primary" type="submit">Cadastrar condomínio</button>
-                  </form>
-                  <form id="formRemoverCondominio" class="form-card danger-card">
-                    <h4>Remover condomínio</h4>
-                    <p class="hint">Selecione um condomínio para remover. Essa ação pode apagar lançamentos vinculados a ele.</p>
-                    <select id="removerCondominio" required></select>
-                    <button class="btn btn-danger" type="submit">Remover condomínio</button>
-                  </form>
-                </div>
-              </section>
+            <form id="formRemoverCondominio" class="form-card danger-card">
+              <h4>Remover condomínio</h4>
+              <p class="hint">Selecione um condomínio para remover. Essa ação pode apagar lançamentos vinculados a ele.</p>
+              <select id="removerCondominio" required></select>
+              <button class="btn btn-danger" type="submit">Remover condomínio</button>
+            </form>
 
-              <section class="admin-tab-panel" data-admin-panel="moradores">
-                <div class="admin-section-head">
-                  <div><h4>Cadastro completo de moradores</h4><p>Área ampla para cadastrar responsável, moradores vinculados, veículo, unidade e acesso ao portal.</p></div>
-                </div>
-                <form id="formMorador" class="form-card resident-card full-card">
-                  <div class="form-section-title">Dados do responsável</div>
-                  <div class="three">
-                    <div><label>Nome do responsável *</label><input id="moradorNome" placeholder="Nome completo do responsável" required /></div>
-                    <div><label>CPF *</label><input id="moradorCpf" placeholder="000.000.000-00" required /></div>
-                    <div><label>Celular *</label><input id="moradorCelular" placeholder="(92) 99999-9999" required /></div>
-                  </div>
-                  <div class="three">
-                    <div><label>E-mail pessoal/opcional</label><input id="moradorEmailOpcional" type="email" placeholder="email opcional do responsável" /></div>
-                    <div><label>E-mail de acesso *</label><input id="moradorEmail" type="email" placeholder="email usado para entrar no portal" required /></div>
-                    <div><label>Senha *</label><input id="moradorSenha" type="text" placeholder="Senha inicial" required /></div>
-                  </div>
-                  <div class="form-section-title">Moradores vinculados à unidade</div>
-                  <label>Pessoas que moram com o responsável</label>
-                  <div id="moradoresExtrasList" class="repeat-list">
-                    <div class="repeat-row"><input class="morador-extra-nome" placeholder="Nome de outro morador" /><button type="button" class="btn btn-light btn-small remove-extra">Remover</button></div>
-                  </div>
-                  <button id="addMoradorExtra" type="button" class="btn btn-light btn-small">+ Adicionar morador</button>
-                  <div class="form-section-title">Unidade, veículo e condomínio</div>
-                  <div class="three">
-                    <div><label>Placa do carro/moto</label><input id="moradorPlaca" placeholder="ABC1D23, se tiver" /></div>
-                    <div><label>Apartamento / unidade *</label><input id="moradorUnidade" placeholder="Ex.: Apto 101 / Bloco A" required /></div>
-                    <div><label>Selecione o condomínio *</label><select id="moradorCondominio" required></select></div>
-                  </div>
-                  <div class="file-fields custom-upload resident-photo large-upload">
-                    <span class="upload-title">Foto do morador (opcional)</span>
-                    <label for="moradorFoto" class="upload-button">Selecionar foto</label>
-                    <input id="moradorFoto" type="file" accept="image/*" class="upload-input" />
-                    <span id="moradorFotoNome" class="upload-file-name">Nenhuma foto selecionada</span>
-                  </div>
-                  <button class="btn btn-primary large-action" type="submit">Criar acesso do morador</button>
-                  <p class="hint">Este cadastro cria o login no Supabase Auth e salva os dados completos no perfil do morador.</p>
-                </form>
-                <form id="formAlterarSenhaMorador" class="form-card senha-card full-card">
-                  <h4>Alterar senha de morador</h4>
-                  <p class="hint">Selecione o condomínio para listar os moradores cadastrados e definir uma nova senha de acesso.</p>
-                  <div class="three">
-                    <div><label>Condomínio</label><select id="senhaCondominio" required></select></div>
-                    <div><label>Morador</label><select id="senhaMorador" required><option value="">Selecione primeiro o condomínio</option></select></div>
-                    <div><label>Nova senha</label><input id="novaSenhaMorador" type="text" placeholder="Digite a nova senha" required /></div>
-                  </div>
-                  <button class="btn btn-primary" type="submit">Alterar senha do morador</button>
-                </form>
-              </section>
 
-              <section class="admin-tab-panel" data-admin-panel="relatorios">
-                <div class="admin-section-head">
-                  <div><h4>Consulta, relatório e backup de moradores</h4><p>Filtre por condomínio, pesquise por placa e exporte relatórios profissionais.</p></div>
-                </div>
-                <section class="form-card full-card residents-tools-card">
-                  <div class="two">
-                    <div><label>Filtrar por condomínio</label><select id="relatorioCondominio"></select></div>
-                    <div><label>Buscar por placa do veículo</label><input id="buscaPlaca" placeholder="Digite a placa cadastrada" /></div>
-                  </div>
-                  <div class="two">
-                    <div class="file-fields custom-upload"><span class="upload-title">Logo do condomínio para relatório (opcional)</span><label for="logoCondominioRelatorio" class="upload-button">Selecionar logo</label><input id="logoCondominioRelatorio" type="file" accept="image/*" class="upload-input" /><span id="logoCondominioRelatorioNome" class="upload-file-name">Nenhuma logo selecionada</span></div>
-                    <div class="file-fields custom-upload"><span class="upload-title">Logo da empresa DM para relatório (opcional)</span><label for="logoDmRelatorio" class="upload-button">Selecionar logo</label><input id="logoDmRelatorio" type="file" accept="image/*" class="upload-input" /><span id="logoDmRelatorioNome" class="upload-file-name">Nenhuma logo selecionada</span></div>
-                  </div>
-                  <div class="action-row">
-                    <button id="exportMoradoresPdf" type="button" class="btn btn-primary">Exportar relatório PDF horizontal</button>
-                    <button id="exportMoradoresCsv" type="button" class="btn btn-light">Exportar CSV</button>
-                    <button id="backupPortalBtn" type="button" class="btn btn-light">Fazer backup geral</button>
-                  </div>
-                  <div id="moradoresRelatorioResumo" class="report-summary">Selecione um condomínio para visualizar os moradores cadastrados.</div>
-                  <div id="moradoresRelatorioLista" class="residents-table-wrap"></div>
-                </section>
-              </section>
+            <form id="formMorador" class="form-card">
+              <h4>Cadastrar morador e criar login</h4>
+              <input id="moradorNome" placeholder="Nome do morador" required />
+              <input id="moradorEmail" type="email" placeholder="E-mail de acesso" required />
+              <input id="moradorSenha" type="text" placeholder="Senha inicial" required />
+              <input id="moradorUnidade" placeholder="Apartamento / unidade" />
+              <select id="moradorCondominio" required></select>
+              <button class="btn btn-primary" type="submit">Criar acesso do morador</button>
+              <p class="hint">Este cadastro usa uma função segura do Cloudflare Pages para criar o login no Supabase Auth.</p>
+            </form>
 
-              <section class="admin-tab-panel" data-admin-panel="lancamentos">
-                <div class="admin-section-head"><div><h4>Lançamentos e serviços</h4><p>Cadastre despesas, serviços, categorias, justificativas e anexos.</p></div></div>
-                <form id="formLancamento" class="form-card full-card">
-                  <div class="two"><select id="lanCondominio" required></select><input id="lanData" type="date" required /></div>
-                  <div class="two"><input id="lanValor" type="number" step="0.01" placeholder="Valor da despesa" required /><input id="lanCategoria" placeholder="Categoria: Energia, Água, Manutenção..." /></div>
-                  <input id="lanLocal" placeholder="Local: Bloco A, garagem, cano..." />
-                  <textarea id="lanJustificativa" placeholder="Justificativa / motivo do pagamento ou serviço"></textarea>
-                  <div class="file-fields custom-upload"><span class="upload-title">Anexo / foto</span><label for="lanAnexo" class="upload-button">Selecionar imagem</label><input id="lanAnexo" type="file" accept="image/*" class="upload-input" /><span id="lanAnexoNome" class="upload-file-name">Nenhuma imagem selecionada</span></div>
-                  <button class="btn btn-primary" type="submit">Salvar lançamento</button>
-                </form>
-              </section>
+            <form id="formRemoverMorador" class="form-card danger-card">
+              <h4>Remover morador e login</h4>
+              <p class="hint">Selecione o morador para remover o perfil e excluir o login de acesso.</p>
+              <select id="removerMorador" required></select>
+              <button class="btn btn-danger" type="submit">Remover morador</button>
+            </form>
 
-              <section class="admin-tab-panel" data-admin-panel="remocoes">
-                <div class="admin-section-head"><div><h4>Remoções</h4><p>Área exclusiva para exclusões controladas de moradores e lançamentos.</p></div></div>
-                <div class="admin-cards two-columns">
-                  <form id="formRemoverMorador" class="form-card danger-card">
-                    <h4>Remover morador e login</h4>
-                    <p class="hint">Selecione o morador para remover o perfil e excluir o login de acesso.</p>
-                    <select id="removerMorador" required></select>
-                    <button class="btn btn-danger" type="submit">Remover morador</button>
-                  </form>
-                  <form id="formRemoverLancamento" class="form-card danger-card">
-                    <h4>Remover lançamento</h4>
-                    <p class="hint">Selecione um lançamento para remover. Essa ação não poderá ser desfeita.</p>
-                    <select id="removerLancamento" required></select>
-                    <button class="btn btn-danger" type="submit">Remover lançamento</button>
-                  </form>
-                </div>
-              </section>
-            </div>
+
+            
+            <form id="formLancamento" class="form-card wide">
+              <h4>Novo lançamento / serviço</h4>
+              <div class="two">
+                <select id="lanCondominio" required></select>
+                <input id="lanData" type="date" required />
+              </div>
+              <div class="two">
+                <input id="lanValor" type="number" step="0.01" placeholder="Valor da despesa" required />
+                <input id="lanCategoria" placeholder="Categoria: Energia, Água, Manutenção..." />
+              </div>
+              <input id="lanLocal" placeholder="Local: Bloco A, garagem, cano..." />
+              <textarea id="lanJustificativa" placeholder="Justificativa / motivo do pagamento ou serviço"></textarea>
+              <div class="file-fields custom-upload">
+                <span class="upload-title">Anexo / foto</span>
+                <label for="lanAnexo" class="upload-button">Selecionar imagem</label>
+                <input id="lanAnexo" type="file" accept="image/*" class="upload-input" />
+                <span id="lanAnexoNome" class="upload-file-name">Nenhuma imagem selecionada</span>
+              </div>
+              <button class="btn btn-primary" type="submit">Salvar lançamento</button>
+            </form>
+
+
+            <form id="formRemoverLancamento" class="form-card danger-card wide">
+              <h4>Remover lançamento</h4>
+              <p class="hint">Selecione um lançamento para remover. Essa ação não poderá ser desfeita.</p>
+              <select id="removerLancamento" required></select>
+              <button class="btn btn-danger" type="submit">Remover lançamento</button>
+            </form>
+
           </div>
           <p id="adminMsg" class="message"></p>
         </div>
@@ -323,24 +253,6 @@
             : "Nenhuma imagem selecionada";
         });
       }
-    });
-  </script>
-
-
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const buttons = document.querySelectorAll("#adminPanel .admin-menu-btn");
-      const panels = document.querySelectorAll("#adminPanel .admin-tab-panel");
-      buttons.forEach((button) => {
-        button.addEventListener("click", function () {
-          const tab = button.getAttribute("data-admin-tab");
-          buttons.forEach((btn) => btn.classList.remove("active"));
-          panels.forEach((panel) => panel.classList.remove("active"));
-          button.classList.add("active");
-          const target = document.querySelector('#adminPanel .admin-tab-panel[data-admin-panel="' + tab + '"]');
-          if (target) target.classList.add("active");
-        });
-      });
     });
   </script>
 
