@@ -464,17 +464,23 @@ body {
 
 
 
+
+
+
+
+
+
 .brand-icon {
-    width: 56px;
-    height: 56px;
+    width: 64px;
+    height: 64px;
     background: #ffffff;
-    border-radius: 16px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
     overflow: hidden;
-    padding: 4px;
+    padding: 2px;
     flex-shrink: 0;
 }
 
@@ -482,4 +488,6 @@ body {
     width: 100%;
     height: 100%;
     object-fit: contain;
+    display: block;
 }
+
