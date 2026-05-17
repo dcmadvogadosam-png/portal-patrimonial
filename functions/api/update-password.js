@@ -4,20 +4,27 @@ const json = (body, status = 200) =>
     headers: {
       "content-type": "application/json; charset=utf-8",
       "access-control-allow-origin": "*",
-      "access-control-allow-methods": "POST, PATCH, OPTIONS",
+      "access-control-allow-methods": "POST, OPTIONS",
       "access-control-allow-headers": "content-type, authorization"
     }
   });
 
-function requiredEnv(env) {
-  const missing = [];
-  if (!env.SUPABASE_URL) missing.push("SUPABASE_URL");
-  if (!env.SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-  return missing;
+function baseUrl(env) {
+  return String(env.SUPABASE_URL || "").replace(/\/$/, "");
 }
 
-function cleanSupabaseUrl(env) {
-  return String(env.SUPABASE_URL || "").replace(/\/$/, "");
+function serviceKey(env) {
+  return String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+}
+
+function supabaseHeaders(env, extra = {}) {
+  const key = serviceKey(env);
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    ...extra
+  };
 }
 
 async function readJsonSafe(res) {
@@ -26,96 +33,120 @@ async function readJsonSafe(res) {
   try { return JSON.parse(text); } catch { return { raw: text }; }
 }
 
-async function supabaseFetch(env, path, options = {}) {
-  const headers = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    "Content-Type": "application/json",
-    Prefer: "return=representation",
-    ...(options.headers || {})
-  };
-  return fetch(`${cleanSupabaseUrl(env)}${path}`, { ...options, headers });
+function decodeJwtRole(key) {
+  try {
+    const payload = key.split(".")[1];
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return decoded.role || null;
+  } catch {
+    return null;
+  }
+}
+
+async function supabaseRest(env, path, options = {}) {
+  return fetch(`${baseUrl(env)}${path}`, {
+    ...options,
+    headers: supabaseHeaders(env, options.headers || {})
+  });
 }
 
 async function getLoggedUser(env, request) {
   const authHeader = request.headers.get("authorization") || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!token) return null;
 
-  const res = await fetch(`${cleanSupabaseUrl(env)}/auth/v1/user`, {
+  if (!token) {
+    return { ok: false, error: "Token do administrador ausente. Faça login novamente.", status: 401 };
+  }
+
+  const res = await fetch(`${baseUrl(env)}/auth/v1/user`, {
     headers: {
-      apikey: env.SUPABASE_SERVICE_ROLE_KEY,
+      apikey: serviceKey(env),
       Authorization: `Bearer ${token}`
     }
   });
 
-  if (!res.ok) return null;
-  return res.json();
+  const data = await readJsonSafe(res);
+  if (!res.ok || !data?.id) {
+    return { ok: false, error: "Sessão do administrador inválida. Faça logout e login novamente.", status: 401, detalhe: data };
+  }
+
+  return { ok: true, user: data };
 }
 
 async function assertAdmin(env, request) {
-  const user = await getLoggedUser(env, request);
-  if (!user?.id) {
-    return {
-      ok: false,
-      response: json({
-        error: "Sessão inválida. Faça logout e login novamente como administrador."
-      }, 401)
-    };
-  }
+  const session = await getLoggedUser(env, request);
+  if (!session.ok) return session;
 
-  const res = await supabaseFetch(
+  const res = await supabaseRest(
     env,
-    `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=id,email,role,ativo&limit=1`,
+    `/rest/v1/profiles?id=eq.${encodeURIComponent(session.user.id)}&select=id,email,role,ativo&limit=1`,
     { method: "GET" }
   );
 
   const rows = await readJsonSafe(res);
   const profile = Array.isArray(rows) ? rows[0] : null;
 
-  if (!profile || profile.role !== "admin" || profile.ativo === false) {
-    return {
-      ok: false,
-      response: json({
-        error: "Acesso negado. O usuário logado precisa ser administrador."
-      }, 403)
-    };
+  if (!res.ok) {
+    return { ok: false, error: "Erro ao consultar perfil do administrador.", status: 500, detalhe: rows };
   }
 
-  return { ok: true, user, profile };
+  if (!profile || profile.role !== "admin" || profile.ativo === false) {
+    return { ok: false, error: "O usuário logado não possui permissão administrativa na tabela profiles.", status: 403 };
+  }
+
+  return { ok: true, admin: profile };
+}
+
+async function getProfile(env, userId, email) {
+  if (userId) {
+    const res = await supabaseRest(
+      env,
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=id,email,nome,role,ativo&limit=1`,
+      { method: "GET" }
+    );
+    const rows = await readJsonSafe(res);
+    if (Array.isArray(rows) && rows[0]) return rows[0];
+  }
+
+  if (email) {
+    const res = await supabaseRest(
+      env,
+      `/rest/v1/profiles?email=eq.${encodeURIComponent(email)}&select=id,email,nome,role,ativo&limit=1`,
+      { method: "GET" }
+    );
+    const rows = await readJsonSafe(res);
+    if (Array.isArray(rows) && rows[0]) return rows[0];
+  }
+
+  return null;
 }
 
 async function findAuthUserByEmail(env, email) {
   if (!email) return null;
 
-  for (let page = 1; page <= 20; page++) {
-    const res = await supabaseFetch(
+  for (let page = 1; page <= 10; page++) {
+    const res = await supabaseRest(
       env,
       `/auth/v1/admin/users?page=${page}&per_page=100`,
       { method: "GET" }
     );
 
     const data = await readJsonSafe(res);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return { error: true, status: res.status, detalhe: data };
+    }
 
-    const users = Array.isArray(data?.users)
-      ? data.users
-      : (Array.isArray(data) ? data : []);
-
-    const found = users.find(
-      u => String(u.email || "").toLowerCase() === String(email).toLowerCase()
-    );
-
-    if (found?.id) return found;
-
-    if (!users.length || users.length < 100) break;
+    const users = Array.isArray(data?.users) ? data.users : [];
+    const found = users.find(u => String(u.email || "").toLowerCase() === String(email).toLowerCase());
+    if (found) return found;
+    if (users.length < 100) break;
   }
 
   return null;
 }
 
 async function updateAuthPassword(env, authUserId, password) {
-  const res = await supabaseFetch(
+  const res = await supabaseRest(
     env,
     `/auth/v1/admin/users/${encodeURIComponent(authUserId)}`,
     {
@@ -125,35 +156,7 @@ async function updateAuthPassword(env, authUserId, password) {
   );
 
   const data = await readJsonSafe(res);
-  return { res, data };
-}
-
-async function createAuthUser(env, email, password, nome) {
-  const res = await supabaseFetch(env, `/auth/v1/admin/users`, {
-    method: "POST",
-    body: JSON.stringify({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { nome: nome || "" }
-    })
-  });
-
-  const data = await readJsonSafe(res);
-  return { res, data };
-}
-
-async function updateProfileId(env, oldId, newId) {
-  if (!oldId || !newId || oldId === newId) return;
-
-  await supabaseFetch(
-    env,
-    `/rest/v1/profiles?id=eq.${encodeURIComponent(oldId)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ id: newId })
-    }
-  );
+  return { ok: res.ok, status: res.status, data };
 }
 
 export async function onRequestOptions() {
@@ -161,145 +164,120 @@ export async function onRequestOptions() {
 }
 
 export async function onRequestPost({ request, env }) {
-  return updatePassword(request, env);
-}
-
-export async function onRequestPatch({ request, env }) {
-  return updatePassword(request, env);
-}
-
-async function updatePassword(request, env) {
   try {
-    const missing = requiredEnv(env);
-    if (missing.length) {
+    const key = serviceKey(env);
+
+    if (!env.SUPABASE_URL || !key) {
       return json({
-        error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}`
+        error: "Variáveis ausentes no Cloudflare.",
+        detalhe: {
+          SUPABASE_URL: Boolean(env.SUPABASE_URL),
+          SUPABASE_SERVICE_ROLE_KEY: Boolean(key)
+        }
+      }, 500);
+    }
+
+    const keyRole = decodeJwtRole(key);
+    if (keyRole !== "service_role") {
+      return json({
+        error: "A variável SUPABASE_SERVICE_ROLE_KEY não é uma chave service_role.",
+        detalhe: { role_detectada_no_jwt: keyRole || "não identificada" }
       }, 500);
     }
 
     const admin = await assertAdmin(env, request);
-    if (!admin.ok) return admin.response;
+    if (!admin.ok) {
+      return json({ error: admin.error, detalhe: admin.detalhe || null }, admin.status || 403);
+    }
 
-    const body = await request.json().catch(() => null);
+    const body = await request.json().catch(() => ({}));
+    const userId = String(body.user_id || body.id || "").trim();
+    const email = String(body.email || "").trim().toLowerCase();
+    const password = String(body.password || body.nova_senha || "");
 
-    const selectedId = String(body?.user_id || body?.id || "").trim();
-    const selectedEmail = String(body?.email || "").trim().toLowerCase();
-    const password = String(body?.password || body?.nova_senha || "");
-
-    if (!selectedId && !selectedEmail) {
-      return json({ error: "Selecione o morador." }, 400);
+    if (!userId && !email) {
+      return json({ error: "Selecione um morador para alterar a senha." }, 400);
     }
 
     if (password.length < 6) {
-      return json({
-        error: "A nova senha precisa ter pelo menos 6 caracteres."
-      }, 400);
+      return json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, 400);
     }
 
-    let profile = null;
-
-    if (selectedId) {
-      const res = await supabaseFetch(
-        env,
-        `/rest/v1/profiles?id=eq.${encodeURIComponent(selectedId)}&select=id,email,nome,role&limit=1`,
-        { method: "GET" }
-      );
-      const rows = await readJsonSafe(res);
-      if (Array.isArray(rows) && rows.length) profile = rows[0];
-    }
-
-    if (!profile && selectedEmail) {
-      const res = await supabaseFetch(
-        env,
-        `/rest/v1/profiles?email=eq.${encodeURIComponent(selectedEmail)}&select=id,email,nome,role&limit=1`,
-        { method: "GET" }
-      );
-      const rows = await readJsonSafe(res);
-      if (Array.isArray(rows) && rows.length) profile = rows[0];
-    }
+    const profile = await getProfile(env, userId, email);
 
     if (!profile) {
       return json({
-        error: "Morador não encontrado na tabela profiles."
+        error: "Morador não encontrado na tabela profiles.",
+        detalhe: { user_id_recebido: userId || null, email_recebido: email || null }
       }, 404);
     }
 
-    if (!profile.email) {
-      return json({
-        error: "O morador não possui e-mail cadastrado."
-      }, 400);
+    if (profile.role !== "morador") {
+      return json({ error: "O usuário selecionado não é um morador." }, 400);
     }
 
-    if (profile.role && profile.role !== "morador") {
-      return json({
-        error: "O usuário selecionado não é um morador."
-      }, 400);
-    }
+    /*
+      MÉTODO SIMPLES E DIRETO:
+      1) A tabela profiles usa o mesmo ID do Supabase Auth.
+      2) Primeiro tentamos alterar a senha diretamente pelo profile.id.
+      3) Se o ID estiver divergente por cadastro antigo, fazemos fallback pelo e-mail.
+    */
 
-    // 1. Procura o usuário no Supabase Auth pelo e-mail.
-    let authUser = await findAuthUserByEmail(env, profile.email);
+    let authUserId = profile.id;
+    let tentativaDireta = await updateAuthPassword(env, authUserId, password);
 
-    // 2. Se não existir no Auth, cria automaticamente.
-    let createdNow = false;
-    if (!authUser) {
-      const created = await createAuthUser(
-        env,
-        profile.email,
-        password,
-        profile.nome
-      );
+    if (!tentativaDireta.ok) {
+      const authByEmail = await findAuthUserByEmail(env, profile.email);
 
-      if (!created.res.ok) {
+      if (authByEmail?.error) {
         return json({
-          error: "Não foi possível criar o usuário no Supabase Auth.",
-          detalhe: created.data
-        }, created.res.status || 500);
+          error: "Não foi possível consultar usuários no Supabase Auth usando service_role.",
+          detalhe: authByEmail
+        }, authByEmail.status || 500);
       }
 
-      authUser = created.data?.user || created.data;
-      createdNow = true;
-    }
+      if (!authByEmail?.id) {
+        return json({
+          error: "Este morador existe na tabela profiles, mas não existe em Authentication > Users.",
+          detalhe: {
+            email_do_morador: profile.email,
+            profile_id: profile.id,
+            tentativa_direta_status: tentativaDireta.status,
+            tentativa_direta_retorno: tentativaDireta.data
+          }
+        }, 404);
+      }
 
-    if (!authUser?.id) {
-      return json({
-        error: "Não foi possível localizar o ID do usuário no Supabase Auth."
-      }, 500);
-    }
+      authUserId = authByEmail.id;
+      const tentativaPorEmail = await updateAuthPassword(env, authUserId, password);
 
-    // 3. Sincroniza o ID da tabela profiles com o Auth.
-    if (profile.id !== authUser.id) {
-      await updateProfileId(env, profile.id, authUser.id);
-    }
-
-    // 4. Atualiza a senha.
-    const attempt = await updateAuthPassword(
-      env,
-      authUser.id,
-      password
-    );
-
-    if (!attempt.res.ok) {
-      return json({
-        error: attempt.data?.msg ||
-               attempt.data?.message ||
-               attempt.data?.error ||
-               "Erro ao alterar senha no Supabase Auth.",
-        detalhe: attempt.data
-      }, attempt.res.status || 500);
+      if (!tentativaPorEmail.ok) {
+        return json({
+          error: "Supabase Auth recusou a alteração de senha.",
+          detalhe: {
+            auth_user_id: authUserId,
+            email: profile.email,
+            status: tentativaPorEmail.status,
+            retorno_supabase: tentativaPorEmail.data
+          }
+        }, tentativaPorEmail.status || 500);
+      }
     }
 
     return json({
       ok: true,
-      created_auth_user: createdNow,
-      user_id: authUser.id,
-      email: profile.email,
-      mensagem: createdNow
-        ? "Usuário não existia no Supabase Auth, foi criado automaticamente e a senha foi definida com sucesso."
-        : "Senha alterada com sucesso."
+      mensagem: "Senha do morador alterada com sucesso.",
+      morador: {
+        nome: profile.nome,
+        email: profile.email,
+        profile_id: profile.id,
+        auth_user_id_usado: authUserId
+      }
     });
   } catch (err) {
     return json({
-      error: err?.message || "Erro interno ao alterar senha."
+      error: "Erro interno na função update-password.",
+      detalhe: err?.message || String(err)
     }, 500);
   }
 }

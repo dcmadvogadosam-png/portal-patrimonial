@@ -1,3 +1,4 @@
+console.log("Portal DM versão: senha-metodo-simples-direto-2026-05-17");
 
 const $ = (id) => document.getElementById(id);
 const money = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -327,9 +328,13 @@ async function alterarSenhaMorador(){
     body:JSON.stringify({user_id,email: morador?.email, password})
   });
   const result=await res.json().catch(()=>({}));
-  if(!res.ok) return msg($("adminMsg"), (result.error || "Erro ao alterar senha do morador.") + (result.dica ? " " + result.dica : ""), "error");
+  if(!res.ok) {
+    console.error("Erro detalhado ao alterar senha:", result);
+    const detalhe = result.detalhe ? " | Detalhe: " + JSON.stringify(result.detalhe) : "";
+    return msg($("adminMsg"), (result.error || "Erro ao alterar senha do morador.") + detalhe, "error");
+  }
   if($("novaSenhaMorador")) $("novaSenhaMorador").value="";
-  msg($("adminMsg"),"Senha do morador alterada com sucesso.","ok");
+  msg($("adminMsg"), result.mensagem || "Senha do morador alterada com sucesso.","ok");
 }
 
 function downloadText(filename, text, type="text/plain"){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
