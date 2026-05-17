@@ -1,3 +1,4 @@
+console.log("Portal DM versão: importar-backup-json-2026-05-17");
 console.log("Portal DM versão: senha-via-supabase-edge-function-2026-05-17");
 console.log("Portal DM versão: senha-metodo-simples-direto-2026-05-17");
 
@@ -65,6 +66,7 @@ function bindBasicEvents() {
   $("formRemoverLancamento")?.addEventListener("submit", removerLancamento);
   $("exportCsvBtn")?.addEventListener("click", exportCsv);
   $("backupJsonBtn")?.addEventListener("click", backupJson);
+  $("backupJsonUpload")?.addEventListener("change", importarBackupJson);
   $("lanAnexo")?.addEventListener("change", (e) => { $("lanAnexoNome").textContent = e.target.files?.[0]?.name || "Nenhum arquivo selecionado"; });
   $("moradorFotoPlaca")?.addEventListener("change", (e) => { $("moradorFotoPlacaNome").textContent = e.target.files?.[0]?.name || "Nenhuma imagem selecionada"; });
   document.querySelectorAll("[data-admin-tab]").forEach(btn => btn.addEventListener("click", () => setAdminTab(btn.dataset.adminTab)));
@@ -357,7 +359,100 @@ async function alterarSenhaMorador(){
 }
 
 function downloadText(filename, text, type="text/plain"){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
+
+
+function normalizarBackupPortal(raw){
+  if(!raw || typeof raw !== "object") throw new Error("Arquivo JSON inválido.");
+  const data = raw.data && typeof raw.data === "object" ? raw.data : raw;
+  const condominiosImport = Array.isArray(data.condominios) ? data.condominios : [];
+  const moradoresImport = Array.isArray(data.moradores) ? data.moradores : (Array.isArray(data.profiles) ? data.profiles.filter(p=>p.role==="morador") : []);
+  const lancamentosImport = Array.isArray(data.lancamentos) ? data.lancamentos : [];
+  if(!condominiosImport.length && !moradoresImport.length && !lancamentosImport.length){
+    throw new Error("O backup não contém condomínios, moradores ou lançamentos para importar.");
+  }
+  return { condominios: condominiosImport, moradores: moradoresImport, lancamentos: lancamentosImport };
+}
+
+async function importarBackupJson(e){
+  const input = e.target;
+  const file = input.files?.[0];
+  if(!file) return;
+
+  show($("backupImportBox"));
+  msg($("backupImportMsg"), "Lendo arquivo de backup...", "");
+  if($("backupImportDetails")) $("backupImportDetails").innerHTML = "";
+
+  try{
+    if(profile?.role !== "admin") throw new Error("Apenas administradores podem importar backup.");
+    if(!file.name.toLowerCase().endsWith(".json")) throw new Error("Selecione um arquivo .json válido.");
+
+    const text = await file.text();
+    const raw = JSON.parse(text);
+    const backup = normalizarBackupPortal(raw);
+
+    const resumo = `Condomínios: ${backup.condominios.length} | Moradores: ${backup.moradores.length} | Lançamentos: ${backup.lancamentos.length}`;
+    const confirmar = confirm(`Importar backup JSON?\\n\\n${resumo}\\n\\nOs registros existentes com o mesmo ID/e-mail serão atualizados.`);
+    if(!confirmar){
+      msg($("backupImportMsg"), "Importação cancelada.", "");
+      input.value = "";
+      return;
+    }
+
+    const {data:sessionData}=await supabaseClient.auth.getSession();
+    const token=sessionData?.session?.access_token;
+    if(!token) throw new Error("Sessão expirada. Faça login novamente como administrador.");
+
+    msg($("backupImportMsg"), "Importando backup. Aguarde...", "");
+
+    const res = await fetch("/api/import-backup", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`
+      },
+      body: JSON.stringify({ backup })
+    });
+
+    const result = await res.json().catch(()=>({}));
+    if(!res.ok || !result.ok){
+      console.error("Erro na importação do backup:", result);
+      throw new Error(result.error || "Erro ao importar backup JSON.");
+    }
+
+    msg($("backupImportMsg"), "Backup importado com sucesso.", "ok");
+    if($("backupImportDetails")){
+      $("backupImportDetails").innerHTML = `
+        <div class="import-result-grid">
+          <span>🏢 Condomínios: <strong>${result.importados?.condominios ?? 0}</strong></span>
+          <span>👥 Moradores: <strong>${result.importados?.moradores ?? 0}</strong></span>
+          <span>💰 Lançamentos: <strong>${result.importados?.lancamentos ?? 0}</strong></span>
+          <span>🔐 Usuários Auth criados: <strong>${result.importados?.auth_criados ?? 0}</strong></span>
+        </div>
+        ${result.avisos?.length ? `<div class="import-warnings"><strong>Avisos:</strong><br>${result.avisos.map(escapeHtml).join("<br>")}</div>` : ""}
+      `;
+    }
+
+    await carregarCondominios();
+    await carregarMoradores();
+    await carregarLancamentos();
+
+  }catch(err){
+    msg($("backupImportMsg"), err?.message || "Erro ao importar backup.", "error");
+  }finally{
+    input.value = "";
+  }
+}
+
 function exportCsv(){ const header=["data","tipo","valor","categoria","condominio","descricao","justificativa"]; const rows=lancamentos.map(l=>[l.data,l.tipo,l.valor,l.categoria||"",l.condominios?.nome||"",l.descricao||"",(l.justificativa||"").replace(/\n/g," ")]); const csv=[header,...rows].map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";")).join("\n"); downloadText("lancamentos_portal_transparencia_dm.csv",csv,"text/csv;charset=utf-8"); }
-function backupJson(){ downloadText("backup_portal_transparencia_dm.json", JSON.stringify({gerado_em:new Date().toISOString(),condominios,moradores,lancamentos},null,2), "application/json"); }
+function backupJson(){
+  downloadText("backup_portal_transparencia_dm.json", JSON.stringify({
+    tipo:"portal_transparencia_dm_backup",
+    versao:2,
+    gerado_em:new Date().toISOString(),
+    condominios,
+    moradores,
+    lancamentos
+  },null,2), "application/json");
+}
 
 document.addEventListener("DOMContentLoaded", init);

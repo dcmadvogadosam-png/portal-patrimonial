@@ -84,38 +84,41 @@
 }
 
 
-/* AJUSTE VISUAL: logo oficial DM no lugar do círculo dourado */
-.dm-logo{
-  border:0!important;
-  background:transparent!important;
-  box-shadow:none!important;
-  overflow:visible!important;
-  flex:0 0 auto!important;
+/* Importação de Backup JSON */
+.import-backup-card{cursor:pointer}
+.import-backup-card input{display:none}
+.import-status{
+  margin-top:18px;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:var(--shadow);
 }
-.dm-logo img{
-  width:100%!important;
-  height:100%!important;
-  object-fit:contain!important;
-  padding:0!important;
-  display:block!important;
-  filter:drop-shadow(0 8px 18px rgba(0,0,0,.22));
+.import-status > strong{display:block;margin-bottom:8px;color:var(--text)}
+.import-details{font-size:.92rem;color:var(--muted)}
+.import-result-grid{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(160px,1fr));
+  gap:10px;
+  margin-top:12px;
 }
-.login-brand .dm-logo{
-  width:82px!important;
-  height:82px!important;
+.import-result-grid span{
+  background:#f6f9ff;
+  border:1px solid #dce8fb;
+  border-radius:14px;
+  padding:12px;
+  color:#12305d;
 }
-.side-brand .dm-logo.small{
-  width:58px!important;
-  height:58px!important;
+.import-warnings{
+  margin-top:12px;
+  padding:12px;
+  border-radius:14px;
+  background:#fff8e6;
+  color:#7a4d00;
+  border:1px solid #ffe0a3;
 }
-@media(max-width:720px){
-  .login-brand .dm-logo{
-    width:68px!important;
-    height:68px!important;
-  }
-  .side-brand .dm-logo.small{
-    width:52px!important;
-    height:52px!important;
-  }
+@media(max-width:900px){
+  .import-result-grid{grid-template-columns:1fr}
 }
 

@@ -191,7 +191,13 @@
             <div class="report-grid">
               <button id="exportCsvBtn" class="report-card" type="button">📊 <strong>Exportar lançamentos CSV</strong><span>Planilha compatível com Excel.</span></button>
               <button id="backupJsonBtn" class="report-card" type="button">💾 <strong>Gerar backup JSON</strong><span>Condomínios, moradores e lançamentos.</span></button>
+              <label class="report-card import-backup-card" for="backupJsonUpload">📥 <strong>Importar backup JSON</strong><span>Restaure condomínios, moradores e lançamentos a partir de um backup gerado pelo portal.</span><input id="backupJsonUpload" type="file" accept="application/json,.json" /></label>
               <button id="printBtn" class="report-card" type="button">🖨️ <strong>Imprimir / PDF</strong><span>Relatório visual da tela atual.</span></button>
+            </div>
+            <div id="backupImportBox" class="import-status hidden">
+              <strong>Status da importação</strong>
+              <p id="backupImportMsg" class="message"></p>
+              <div id="backupImportDetails" class="import-details"></div>
             </div>
           </section>
 
