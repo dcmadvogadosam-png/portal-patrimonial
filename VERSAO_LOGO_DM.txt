@@ -1,0 +1,1 @@
+Ajuste visual: substituição do círculo dourado pela logo oficial DM em login, painel admin e painel morador.
