@@ -28,3 +28,57 @@
   font-weight:800;
   text-decoration:none;
 }
+
+/* ===== Ajustes premium: painel do morador e alteração de senha ===== */
+.app-shell.is-resident{
+  display:block;
+  min-height:100vh;
+  background:linear-gradient(135deg,#edf4ff 0%,#f7fbff 45%,#ffffff 100%);
+}
+.app-shell.is-resident .main-panel{
+  max-width:1180px;
+  margin:0 auto;
+  padding:28px clamp(16px,3vw,38px) 70px;
+}
+.app-shell.is-resident .admin-topbar{
+  background:linear-gradient(135deg,#031f45,#0a4aa5);
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:28px;
+  padding:24px;
+  box-shadow:0 24px 70px rgba(3,31,69,.18);
+  color:#fff;
+  align-items:center;
+}
+.app-shell.is-resident .resident-title{color:#fff;display:block!important;min-width:0}
+.app-shell.is-resident .resident-title .eyebrow{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.22)}
+.app-shell.is-resident .resident-title h2{font-size:clamp(1.55rem,3vw,2.5rem);margin:12px 0 6px;line-height:1.05;color:#fff}
+.app-shell.is-resident .resident-title p{margin:0;color:#d8e8ff;font-weight:800}
+.app-shell.is-resident .user-box{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);box-shadow:none;min-width:280px}
+.app-shell.is-resident .btn-logout{background:#fff;color:#06346f}
+.app-shell.is-resident .metrics-grid{grid-template-columns:repeat(2,minmax(220px,1fr));gap:18px;margin:28px 0}
+.app-shell.is-resident .metric-condominios,.app-shell.is-resident .metric-moradores,.app-shell.is-resident .metric-receitas{display:none}
+.app-shell.is-resident .metric-card{border-radius:24px;padding:26px;box-shadow:0 20px 55px rgba(14,34,66,.11)}
+.app-shell.is-resident .metric-card strong{font-size:1.75rem;color:#061f45}
+.app-shell.is-resident .records-section{border-radius:28px;padding:28px;box-shadow:0 22px 65px rgba(14,34,66,.10)}
+.app-shell.is-resident .section-row{align-items:flex-start}
+.app-shell.is-resident .section-row h2{font-size:1.65rem;color:#061f45}
+.app-shell.is-resident .filters select{display:none}
+.app-shell.is-resident .filters{min-width:min(420px,100%)}
+.app-shell.is-resident .records-list{grid-template-columns:1fr}
+.app-shell.is-resident .record-card{background:linear-gradient(180deg,#ffffff,#f8fbff);border-radius:22px;padding:22px;box-shadow:0 12px 35px rgba(14,34,66,.07)}
+.app-shell.is-resident .record-meta .income{display:none}
+
+.password-manager-card{margin:22px 0;background:linear-gradient(180deg,#ffffff,#fffaf0)}
+.password-manager-card:before,.accent-gold:before{background:linear-gradient(90deg,#f3b33d,#0d55c9)}
+.password-manager-card p{color:#5d6b82;margin:0 0 18px;line-height:1.55;font-weight:700}
+.password-grid{align-items:start}
+.search-inline{display:grid!important;grid-template-columns:1fr auto;gap:10px;margin:0!important}
+.btn-secondary{background:#eef4ff;color:#0d55c9;border:1px solid #cfe0fb}
+.password-manager-card h3 span{background:#f3b33d;color:#08244d}
+
+@media(max-width:760px){
+  .app-shell.is-resident .admin-topbar{padding:18px;border-radius:22px}
+  .app-shell.is-resident .user-box{min-width:100%}
+  .app-shell.is-resident .metrics-grid{grid-template-columns:1fr}
+  .search-inline{grid-template-columns:1fr}
+}

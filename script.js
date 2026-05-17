@@ -49,6 +49,10 @@ function bindBasicEvents() {
   $("filterBusca")?.addEventListener("input", renderLancamentos);
   $("buscaCondominio")?.addEventListener("input", renderCondominiosTable);
   $("buscaMorador")?.addEventListener("input", renderMoradoresTable);
+  $("senhaCondominio")?.addEventListener("change", popularMoradoresSenha);
+  $("pesquisarSenhaMorador")?.addEventListener("click", popularMoradoresSenha);
+  $("senhaBuscaMorador")?.addEventListener("input", popularMoradoresSenha);
+  $("alterarSenhaMoradorBtn")?.addEventListener("click", alterarSenhaMorador);
   $("closeDetail")?.addEventListener("click", () => hide($("detailModal")));
   $("detailModal")?.addEventListener("click", (e) => { if (e.target?.id === "detailModal") hide($("detailModal")); });
   $("formCondominio")?.addEventListener("submit", criarCondominio);
@@ -97,7 +101,7 @@ async function carregarCondominios() {
 
 function popularSelects() {
   const options = `<option value="">Selecione o condomínio</option>` + condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("");
-  ["loginCondominio","moradorCondominio","lanCondominio","removerCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
+  ["loginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
 }
 
 async function loginMorador() {
@@ -134,12 +138,15 @@ async function abrirDashboard() {
   hide($("loginScreen")); show($("dashboardScreen"));
   const isAdmin = profile?.role === "admin";
   $("dashboardScreen").classList.toggle("is-admin", isAdmin);
+  $("dashboardScreen").classList.toggle("is-resident", !isAdmin);
   $("adminSidebar")?.classList.toggle("hidden", !isAdmin);
   $("adminPanel")?.classList.toggle("hidden", !isAdmin);
   $("recordsSection")?.classList.toggle("hidden", false);
   $("sessionLabel").textContent = currentUser.email;
   $("sessionRole").textContent = isAdmin ? "Administrador" : "Morador";
   $("userRoleLabel").textContent = isAdmin ? "Administrador geral" : `Morador | Unidade ${profile.unidade || "-"}`;
+  if (!isAdmin && $("filterTipo")) { $("filterTipo").value = "despesa"; $("filterTipo").disabled = true; }
+  if (isAdmin && $("filterTipo")) { $("filterTipo").disabled = false; }
   const condominio = isAdmin ? { nome: "Todos os condomínios" } : condominios.find(c => c.id === profile.condominio_id);
   $("condominioTitulo").textContent = condominio?.nome || "Condomínio";
   await carregarLancamentos();
@@ -154,7 +161,23 @@ async function carregarMoradores() {
   moradores = error ? [] : (data || []);
   popularMoradores(); renderMoradoresTable(); renderResumo(); renderCondominiosTable();
 }
-function popularMoradores(){ const el=$("removerMorador"); if(!el) return; el.innerHTML = `<option value="">Selecione o morador</option>` + moradores.map(m => `<option value="${m.id}">${escapeHtml((m.nome||m.email||"Morador") + (m.unidade?` - Unidade ${m.unidade}`:"") )}</option>`).join(""); }
+function popularMoradores(){
+  const el=$("removerMorador");
+  if(el) el.innerHTML = `<option value="">Selecione o morador</option>` + moradores.map(m => `<option value="${m.id}">${escapeHtml((m.nome||m.email||"Morador") + (m.unidade?` - Unidade ${m.unidade}`:"") )}</option>`).join("");
+  popularMoradoresSenha();
+}
+function popularMoradoresSenha(){
+  const el=$("senhaMoradorSelecionado"); if(!el) return;
+  const cond=$("senhaCondominio")?.value || "";
+  const busca=($("senhaBuscaMorador")?.value||"").toLowerCase().trim();
+  let lista=[...moradores];
+  if(cond) lista=lista.filter(m=>m.condominio_id===cond);
+  if(busca) lista=lista.filter(m=>[m.nome,m.email,m.unidade,m.cpf].join(" ").toLowerCase().includes(busca));
+  el.innerHTML = `<option value="">Selecione um morador</option>` + lista.map(m=>{
+    const condNome=condominios.find(c=>c.id===m.condominio_id)?.nome || "Sem condomínio";
+    return `<option value="${m.id}">${escapeHtml(m.nome||m.email||"Morador")} | ${escapeHtml(condNome)}${m.unidade?` | Unidade ${escapeHtml(m.unidade)}`:""}</option>`;
+  }).join("");
+}
 function popularLancamentosRemocao(){ const el=$("removerLancamento"); if(!el) return; el.innerHTML = `<option value="">Selecione o lançamento</option>` + lancamentos.map(l => `<option value="${l.id}">${escapeHtml(`${formatDate(l.data)} - ${money(l.valor)} - ${l.categoria || l.descricao || l.tipo}`)}</option>`).join(""); }
 
 async function carregarLancamentos(){
@@ -166,15 +189,18 @@ async function carregarLancamentos(){
 }
 
 function renderResumo(){
-  const monthItems = lancamentos.filter(l => todayMonth(l.data));
-  const receitas = monthItems.filter(l => l.tipo === "receita").reduce((s,l)=>s+Number(l.valor||0),0);
-  const despesas = monthItems.filter(l => l.tipo !== "receita").reduce((s,l)=>s+Number(l.valor||0),0);
+  const isAdmin = profile?.role === "admin";
+  const baseItems = isAdmin ? lancamentos.filter(l => todayMonth(l.data)) : lancamentos;
+  const receitas = baseItems.filter(l => l.tipo === "receita").reduce((s,l)=>s+Number(l.valor||0),0);
+  const despesas = baseItems.filter(l => l.tipo !== "receita").reduce((s,l)=>s+Number(l.valor||0),0);
   if($("totalReceitas")) $("totalReceitas").textContent = money(receitas);
   if($("totalDespesas")) $("totalDespesas").textContent = money(despesas);
   if($("saldoAtual")) $("saldoAtual").textContent = money(receitas-despesas);
-  if($("totalRegistros")) $("totalRegistros").textContent = lancamentos.length;
-  if($("metricCondominios")) $("metricCondominios").textContent = condominios.length;
+  if($("totalRegistros")) $("totalRegistros").textContent = isAdmin ? lancamentos.length : lancamentos.filter(l=>l.tipo !== "receita").length;
+  if($("metricCondominios")) $("metricCondominios").textContent = isAdmin ? condominios.length : 1;
   if($("metricMoradores")) $("metricMoradores").textContent = moradores.length;
+  if($("labelDespesas")) $("labelDespesas").textContent = isAdmin ? "Despesas (Mês)" : "Total de despesas";
+  if($("smallDespesas")) $("smallDespesas").textContent = isAdmin ? "Total registrado" : "Do seu condomínio";
 }
 
 function renderCondominiosTable(){
@@ -203,7 +229,8 @@ function renderLancamentos(){
   const list=$("recordsList"); if(!list) return;
   const tipo=$("filterTipo")?.value||""; const busca=($("filterBusca")?.value||"").toLowerCase().trim();
   let itens=[...lancamentos];
-  if(tipo) itens=itens.filter(l=>l.tipo===tipo);
+  if(profile?.role !== "admin") itens=itens.filter(l=>l.tipo !== "receita");
+  else if(tipo) itens=itens.filter(l=>l.tipo===tipo);
   if(busca) itens=itens.filter(l=>[l.descricao,l.categoria,l.justificativa,l.condominios?.nome].join(" ").toLowerCase().includes(busca));
   list.innerHTML = itens.map(l=>`<article class="record-card"><div><h4>${escapeHtml(l.descricao || l.categoria || "Lançamento")}</h4><div class="record-meta"><span class="tag ${l.tipo === "receita" ? "income" : "expense"}">${l.tipo === "receita" ? "Receita" : "Despesa"}</span><span class="tag">${money(l.valor)}</span><span class="tag">${formatDate(l.data)}</span>${profile?.role==="admin"?`<span class="tag">${escapeHtml(l.condominios?.nome||"")}</span>`:""}${l.categoria?`<span class="tag">${escapeHtml(l.categoria)}</span>`:""}</div><p>${escapeHtml((l.justificativa||"Sem justificativa informada.").slice(0,180))}${(l.justificativa||"").length>180?"...":""}</p></div><div class="record-actions"><button class="btn details-btn" onclick="abrirDetalhes('${l.id}')">Ver detalhes</button></div></article>`).join("") || `<p>Nenhum lançamento encontrado.</p>`;
 }
@@ -283,6 +310,27 @@ async function criarLancamento(e){
 async function removerCondominio(e){ e.preventDefault(); const id=$("removerCondominio").value; if(!id) return msg($("adminMsg"),"Selecione um condomínio para remover.","error"); const c=condominios.find(x=>x.id===id); if(!confirm(`Tem certeza que deseja remover "${c?.nome||'este condomínio'}"?`)) return; const {error}=await supabaseClient.from("condominios").delete().eq("id",id); if(error) return msg($("adminMsg"),"Erro ao remover condomínio: "+error.message,"error"); await carregarCondominios(); await carregarLancamentos(); msg($("adminMsg"),"Condomínio removido com sucesso.","ok"); }
 async function removerMorador(e){ e.preventDefault(); const id=$("removerMorador").value; if(!id) return msg($("adminMsg"),"Selecione um morador.","error"); const m=moradores.find(x=>x.id===id); if(!confirm(`Remover "${m?.nome||m?.email||'este morador'}"?`)) return; const {data:sessionData}=await supabaseClient.auth.getSession(); const token=sessionData?.session?.access_token; const res=await fetch("/api/delete-user",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({user_id:id})}); const result=await res.json().catch(()=>({})); if(!res.ok) return msg($("adminMsg"),result.error||"Erro ao remover morador.","error"); await carregarMoradores(); msg($("adminMsg"),"Morador removido com sucesso.","ok"); }
 async function removerLancamento(e){ e.preventDefault(); const id=$("removerLancamento").value; if(!id) return msg($("adminMsg"),"Selecione um lançamento.","error"); if(!confirm("Tem certeza que deseja remover este lançamento?")) return; const {error}=await supabaseClient.from("lancamentos").delete().eq("id",id); if(error) return msg($("adminMsg"),"Erro ao remover lançamento: "+error.message,"error"); await carregarLancamentos(); msg($("adminMsg"),"Lançamento removido com sucesso.","ok"); }
+
+async function alterarSenhaMorador(){
+  msg($("adminMsg"),"");
+  const user_id=$("senhaMoradorSelecionado")?.value || "";
+  const password=$("novaSenhaMorador")?.value || "";
+  if(!user_id) return msg($("adminMsg"),"Selecione o morador que terá a senha alterada.","error");
+  if(password.length < 6) return msg($("adminMsg"),"A nova senha precisa ter pelo menos 6 caracteres.","error");
+  const morador=moradores.find(m=>m.id===user_id);
+  if(!confirm(`Alterar a senha de ${morador?.nome || morador?.email || "este morador"}?`)) return;
+  const {data:sessionData}=await supabaseClient.auth.getSession();
+  const token=sessionData?.session?.access_token;
+  const res=await fetch("/api/update-password",{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},
+    body:JSON.stringify({user_id,password})
+  });
+  const result=await res.json().catch(()=>({}));
+  if(!res.ok) return msg($("adminMsg"), result.error || "Erro ao alterar senha do morador.", "error");
+  if($("novaSenhaMorador")) $("novaSenhaMorador").value="";
+  msg($("adminMsg"),"Senha do morador alterada com sucesso.","ok");
+}
 
 function downloadText(filename, text, type="text/plain"){ const blob=new Blob([text],{type}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url); }
 function exportCsv(){ const header=["data","tipo","valor","categoria","condominio","descricao","justificativa"]; const rows=lancamentos.map(l=>[l.data,l.tipo,l.valor,l.categoria||"",l.condominios?.nome||"",l.descricao||"",(l.justificativa||"").replace(/\n/g," ")]); const csv=[header,...rows].map(r=>r.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";")).join("\n"); downloadText("lancamentos_portal_transparencia_dm.csv",csv,"text/csv;charset=utf-8"); }

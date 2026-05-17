@@ -280,19 +280,63 @@ async function handleDeleteUser(request, env) {
   return json({ ok: true });
 }
 
+async function handleUpdatePassword(request, env) {
+  if (request.method === "OPTIONS") return json({ ok: true });
+  if (request.method !== "POST" && request.method !== "PATCH") return json({ error: "Método não permitido." }, 405);
+
+  const missing = requiredEnv(env);
+  if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+
+  const admin = await assertAdmin(env, request);
+  if (!admin.ok) return admin.response;
+
+  const body = await request.json().catch(() => null);
+  const userId = String(body?.user_id || body?.id || "").trim();
+  const password = String(body?.password || body?.nova_senha || "");
+
+  if (!userId) return json({ error: "Selecione o morador para alterar a senha." }, 400);
+  if (password.length < 6) return json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, 400);
+
+  const profileRes = await supabaseFetch(
+    env,
+    `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&role=eq.morador&select=id,email,nome&limit=1`,
+    { method: "GET" }
+  );
+  const profileRows = await readJsonSafe(profileRes);
+  if (!Array.isArray(profileRows) || !profileRows.length) {
+    return json({ error: "Morador não encontrado na tabela profiles." }, 404);
+  }
+
+  const res = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ password })
+  });
+
+  const data = await readJsonSafe(res);
+  if (!res.ok) {
+    return json({
+      error: data?.message || data?.error || data?.raw || "Erro ao alterar senha no Supabase Auth.",
+      detalhe: data
+    }, res.status);
+  }
+
+  return json({ ok: true, user_id: userId, morador: profileRows[0] });
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/delete-user") return handleDeleteUser(request, env);
+    if (url.pathname === "/api/update-password") return handleUpdatePassword(request, env);
     if (url.pathname === "/api/health") {
       const missing = requiredEnv(env);
       return json({
         ok: missing.length === 0,
         missing,
         mode: "worker-assets",
-        routes: ["/api/create-user", "/api/delete-user"],
+        routes: ["/api/create-user", "/api/delete-user", "/api/update-password"],
         database_required: ["condominios", "profiles", "lancamentos", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }

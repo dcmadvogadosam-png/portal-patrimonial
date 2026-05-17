@@ -113,11 +113,11 @@
         </header>
 
         <section class="metrics-grid">
-          <article class="metric-card"><div class="metric-icon blue">🏢</div><div><span>Condomínios</span><strong id="metricCondominios">0</strong><small>Cadastrados</small></div></article>
-          <article class="metric-card"><div class="metric-icon green">👥</div><div><span>Moradores</span><strong id="metricMoradores">0</strong><small>Cadastrados</small></div></article>
-          <article class="metric-card"><div class="metric-icon money">$</div><div><span>Receitas (Mês)</span><strong id="totalReceitas">R$ 0,00</strong><small>Total arrecadado</small></div></article>
-          <article class="metric-card"><div class="metric-icon red">↓</div><div><span>Despesas (Mês)</span><strong id="totalDespesas">R$ 0,00</strong><small>Total registrado</small></div></article>
-          <article class="metric-card"><div class="metric-icon purple">▤</div><div><span>Registros</span><strong id="totalRegistros">0</strong><small>Lançamentos</small></div></article>
+          <article class="metric-card metric-condominios"><div class="metric-icon blue">🏢</div><div><span>Condomínios</span><strong id="metricCondominios">0</strong><small>Cadastrados</small></div></article>
+          <article class="metric-card metric-moradores"><div class="metric-icon green">👥</div><div><span>Moradores</span><strong id="metricMoradores">0</strong><small>Cadastrados</small></div></article>
+          <article class="metric-card metric-receitas"><div class="metric-icon money">$</div><div><span>Receitas (Mês)</span><strong id="totalReceitas">R$ 0,00</strong><small>Total arrecadado</small></div></article>
+          <article class="metric-card metric-despesas"><div class="metric-icon red">↓</div><div><span id="labelDespesas">Despesas (Mês)</span><strong id="totalDespesas">R$ 0,00</strong><small id="smallDespesas">Total registrado</small></div></article>
+          <article class="metric-card metric-registros"><div class="metric-icon purple">▤</div><div><span>Registros</span><strong id="totalRegistros">0</strong><small>Lançamentos</small></div></article>
           <span id="saldoAtual" class="hidden">R$ 0,00</span>
         </section>
 
@@ -172,6 +172,17 @@
               <select id="moradorCondominio" required></select>
               <button class="btn btn-primary span-2" type="submit">👤 Criar acesso do morador</button>
             </form>
+            <div class="password-manager-card action-card accent-gold">
+              <h3><span>🔑</span>Alterar senha de acesso do morador</h3>
+              <p>Filtre pelo condomínio ou pesquise pelo nome/e-mail do morador. Depois selecione o morador e defina uma nova senha.</p>
+              <div class="form-grid password-grid">
+                <select id="senhaCondominio"><option value="">Todos os condomínios</option></select>
+                <div class="search-inline"><input id="senhaBuscaMorador" placeholder="Digite o nome ou e-mail do morador" /><button id="pesquisarSenhaMorador" class="btn btn-secondary" type="button">Pesquisar</button></div>
+                <select id="senhaMoradorSelecionado" class="span-2"><option value="">Selecione um morador</option></select>
+                <input id="novaSenhaMorador" class="span-2" type="text" placeholder="Nova senha de acesso (mínimo 6 caracteres)" />
+                <button id="alterarSenhaMoradorBtn" class="btn btn-primary span-2" type="button">🔐 Atualizar senha do morador</button>
+              </div>
+            </div>
             <div class="table-card"><h3>Moradores cadastrados</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Unidade</th><th>Condomínio</th><th>Pessoas que moram junto</th><th>Placa</th><th>Foto</th><th>Status</th></tr></thead><tbody id="moradoresTable"></tbody></table></div></div>
           </section>
 
@@ -213,7 +224,7 @@
 
         <section id="recordsSection" class="records-section">
           <div class="section-row">
-            <div><h2>Lançamentos e documentos</h2><p>Consulte despesas, receitas, comprovantes e justificativas.</p></div>
+            <div><h2>Lançamentos e documentos</h2><p>Consulte despesas, comprovantes e justificativas do condomínio.</p></div>
             <div class="filters"><select id="filterTipo"><option value="">Todos</option><option value="despesa">Despesas</option><option value="receita">Receitas</option></select><input id="filterBusca" placeholder="Buscar por categoria, descrição ou condomínio" /></div>
           </div>
           <div id="recordsList" class="records-list"></div>
