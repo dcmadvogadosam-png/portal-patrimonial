@@ -280,6 +280,31 @@ async function handleDeleteUser(request, env) {
   return json({ ok: true });
 }
 
+async function findAuthUserByEmail(env, email) {
+  if (!email) return null;
+  // Supabase Admin API does not always support direct email lookup in every project,
+  // so we list users page by page and match the email safely.
+  for (let page = 1; page <= 20; page++) {
+    const res = await supabaseFetch(env, `/auth/v1/admin/users?page=${page}&per_page=100`, { method: "GET" });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return null;
+    const users = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+    const found = users.find(u => String(u.email || "").toLowerCase() === String(email).toLowerCase());
+    if (found?.id) return found;
+    if (!users.length || users.length < 100) break;
+  }
+  return null;
+}
+
+async function updateAuthPassword(env, authUserId, password) {
+  const res = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(authUserId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ password })
+  });
+  const data = await readJsonSafe(res);
+  return { res, data };
+}
+
 async function handleUpdatePassword(request, env) {
   if (request.method === "OPTIONS") return json({ ok: true });
   if (request.method !== "POST" && request.method !== "PATCH") return json({ error: "Método não permitido." }, 405);
@@ -291,36 +316,61 @@ async function handleUpdatePassword(request, env) {
   if (!admin.ok) return admin.response;
 
   const body = await request.json().catch(() => null);
-  const userId = String(body?.user_id || body?.id || "").trim();
+  const selectedId = String(body?.user_id || body?.id || "").trim();
+  const selectedEmail = String(body?.email || "").trim().toLowerCase();
   const password = String(body?.password || body?.nova_senha || "");
 
-  if (!userId) return json({ error: "Selecione o morador para alterar a senha." }, 400);
+  if (!selectedId && !selectedEmail) return json({ error: "Selecione o morador para alterar a senha." }, 400);
   if (password.length < 6) return json({ error: "A nova senha precisa ter pelo menos 6 caracteres." }, 400);
 
-  const profileRes = await supabaseFetch(
-    env,
-    `/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&role=eq.morador&select=id,email,nome&limit=1`,
-    { method: "GET" }
-  );
-  const profileRows = await readJsonSafe(profileRes);
-  if (!Array.isArray(profileRows) || !profileRows.length) {
-    return json({ error: "Morador não encontrado na tabela profiles." }, 404);
+  // Busca o perfil por ID OU por e-mail. Isso corrige cadastros antigos em que profiles.id
+  // ficou diferente do ID real do usuário no Supabase Auth.
+  let profile = null;
+  if (selectedId) {
+    const profileRes = await supabaseFetch(
+      env,
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(selectedId)}&select=id,email,nome,role&limit=1`,
+      { method: "GET" }
+    );
+    const profileRows = await readJsonSafe(profileRes);
+    if (Array.isArray(profileRows) && profileRows.length) profile = profileRows[0];
+  }
+  if (!profile && selectedEmail) {
+    const profileRes = await supabaseFetch(
+      env,
+      `/rest/v1/profiles?email=eq.${encodeURIComponent(selectedEmail)}&select=id,email,nome,role&limit=1`,
+      { method: "GET" }
+    );
+    const profileRows = await readJsonSafe(profileRes);
+    if (Array.isArray(profileRows) && profileRows.length) profile = profileRows[0];
   }
 
-  const res = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ password })
-  });
+  if (!profile) return json({ error: "Morador não encontrado na tabela profiles." }, 404);
+  if (profile.role && profile.role !== "morador") return json({ error: "O usuário selecionado não é um morador." }, 400);
 
-  const data = await readJsonSafe(res);
-  if (!res.ok) {
+  // 1ª tentativa: usar profiles.id como auth user id.
+  let authUserId = profile.id || selectedId;
+  let attempt = await updateAuthPassword(env, authUserId, password);
+
+  // Se falhar, procura no Supabase Auth pelo e-mail do morador e tenta com o ID correto do Auth.
+  if (!attempt.res.ok && profile.email) {
+    const authUser = await findAuthUserByEmail(env, profile.email);
+    if (authUser?.id) {
+      authUserId = authUser.id;
+      attempt = await updateAuthPassword(env, authUserId, password);
+    }
+  }
+
+  if (!attempt.res.ok) {
+    const data = attempt.data || {};
     return json({
-      error: data?.message || data?.error || data?.raw || "Erro ao alterar senha no Supabase Auth.",
-      detalhe: data
-    }, res.status);
+      error: data?.msg || data?.message || data?.error || data?.raw || "Erro ao alterar senha no Supabase Auth. Confira se a variável SUPABASE_SERVICE_ROLE_KEY é a chave service_role correta e se o morador existe em Authentication > Users.",
+      detalhe: data,
+      dica: "Este morador precisa existir também em Supabase > Authentication > Users com o mesmo e-mail do cadastro."
+    }, attempt.res.status || 500);
   }
 
-  return json({ ok: true, user_id: userId, morador: profileRows[0] });
+  return json({ ok: true, user_id: authUserId, morador: profile });
 }
 
 export default {

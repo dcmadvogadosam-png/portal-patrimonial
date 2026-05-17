@@ -324,10 +324,10 @@ async function alterarSenhaMorador(){
   const res=await fetch("/api/update-password",{
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},
-    body:JSON.stringify({user_id,password})
+    body:JSON.stringify({user_id,email: morador?.email, password})
   });
   const result=await res.json().catch(()=>({}));
-  if(!res.ok) return msg($("adminMsg"), result.error || "Erro ao alterar senha do morador.", "error");
+  if(!res.ok) return msg($("adminMsg"), (result.error || "Erro ao alterar senha do morador.") + (result.dica ? " " + result.dica : ""), "error");
   if($("novaSenhaMorador")) $("novaSenhaMorador").value="";
   msg($("adminMsg"),"Senha do morador alterada com sucesso.","ok");
 }
