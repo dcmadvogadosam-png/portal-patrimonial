@@ -1,3 +1,4 @@
+console.log("Portal DM versão: senha-via-supabase-edge-function-2026-05-17");
 console.log("Portal DM versão: senha-metodo-simples-direto-2026-05-17");
 
 const $ = (id) => document.getElementById(id);
@@ -318,21 +319,39 @@ async function alterarSenhaMorador(){
   const password=$("novaSenhaMorador")?.value || "";
   if(!user_id) return msg($("adminMsg"),"Selecione o morador que terá a senha alterada.","error");
   if(password.length < 6) return msg($("adminMsg"),"A nova senha precisa ter pelo menos 6 caracteres.","error");
+
   const morador=moradores.find(m=>m.id===user_id);
+  if(!morador?.email) return msg($("adminMsg"),"O morador selecionado não possui e-mail cadastrado.","error");
+
   if(!confirm(`Alterar a senha de ${morador?.nome || morador?.email || "este morador"}?`)) return;
+
   const {data:sessionData}=await supabaseClient.auth.getSession();
   const token=sessionData?.session?.access_token;
-  const res=await fetch("/api/update-password",{
+  if(!token) return msg($("adminMsg"),"Sessão expirada. Faça login novamente como administrador.","error");
+
+  const endpoint = `${window.DM_SUPABASE_FUNCTIONS_URL}/update-resident-password`;
+
+  const res=await fetch(endpoint,{
     method:"POST",
-    headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},
-    body:JSON.stringify({user_id,email: morador?.email, password})
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":`Bearer ${token}`,
+      "apikey": window.DM_SUPABASE_ANON_KEY
+    },
+    body:JSON.stringify({
+      user_id,
+      email: morador.email,
+      password
+    })
   });
+
   const result=await res.json().catch(()=>({}));
   if(!res.ok) {
-    console.error("Erro detalhado ao alterar senha:", result);
+    console.error("Erro detalhado ao alterar senha via Supabase Edge Function:", result);
     const detalhe = result.detalhe ? " | Detalhe: " + JSON.stringify(result.detalhe) : "";
     return msg($("adminMsg"), (result.error || "Erro ao alterar senha do morador.") + detalhe, "error");
   }
+
   if($("novaSenhaMorador")) $("novaSenhaMorador").value="";
   msg($("adminMsg"), result.mensagem || "Senha do morador alterada com sucesso.","ok");
 }

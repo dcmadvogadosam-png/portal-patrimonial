@@ -1,1 +1,1 @@
-senha-metodo-simples-direto-2026-05-17
+senha-via-supabase-edge-function-2026-05-17
