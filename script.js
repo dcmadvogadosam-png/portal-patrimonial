@@ -1,3 +1,4 @@
+console.log("Portal DM versão: import-backup-direto-sem-api-logo-sem-circulo-2026-05-17");
 console.log("Portal DM versão: importar-backup-json-2026-05-17");
 console.log("Portal DM versão: senha-via-supabase-edge-function-2026-05-17");
 console.log("Portal DM versão: senha-metodo-simples-direto-2026-05-17");
@@ -391,44 +392,108 @@ async function importarBackupJson(e){
     const backup = normalizarBackupPortal(raw);
 
     const resumo = `Condomínios: ${backup.condominios.length} | Moradores: ${backup.moradores.length} | Lançamentos: ${backup.lancamentos.length}`;
-    const confirmar = confirm(`Importar backup JSON?\\n\\n${resumo}\\n\\nOs registros existentes com o mesmo ID/e-mail serão atualizados.`);
+    const confirmar = confirm(`Importar backup JSON?\n\n${resumo}\n\nOs registros existentes com o mesmo ID serão atualizados.`);
     if(!confirmar){
       msg($("backupImportMsg"), "Importação cancelada.", "");
       input.value = "";
       return;
     }
 
-    const {data:sessionData}=await supabaseClient.auth.getSession();
-    const token=sessionData?.session?.access_token;
-    if(!token) throw new Error("Sessão expirada. Faça login novamente como administrador.");
+    msg($("backupImportMsg"), "Importando backup diretamente pelo Supabase. Aguarde...", "");
 
-    msg($("backupImportMsg"), "Importando backup. Aguarde...", "");
+    let totalCondominios = 0;
+    let totalMoradores = 0;
+    let totalLancamentos = 0;
+    const avisos = [];
 
-    const res = await fetch("/api/import-backup", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`
-      },
-      body: JSON.stringify({ backup })
-    });
+    const limparObj = (obj, permitidos) => {
+      const limpo = {};
+      permitidos.forEach(k => {
+        if(obj && Object.prototype.hasOwnProperty.call(obj,k) && obj[k] !== undefined) limpo[k] = obj[k];
+      });
+      return limpo;
+    };
 
-    const result = await res.json().catch(()=>({}));
-    if(!res.ok || !result.ok){
-      console.error("Erro na importação do backup:", result);
-      throw new Error(result.error || "Erro ao importar backup JSON.");
+    const pessoasArray = (value) => {
+      if(Array.isArray(value)) return value.map(v=>String(v).trim()).filter(Boolean);
+      if(typeof value === "string") return value.split(/\n|,/).map(v=>v.trim()).filter(Boolean);
+      return [];
+    };
+
+    const condominiosClean = backup.condominios.map(c => ({
+      ...limparObj(c, ["id","created_at"]),
+      nome: c.nome || c.name || "Condomínio sem nome",
+      endereco: c.endereco || c.address || ""
+    })).filter(c => c.nome);
+
+    if(condominiosClean.length){
+      const { error } = await supabaseClient
+        .from("condominios")
+        .upsert(condominiosClean, { onConflict: "id" });
+      if(error) throw new Error("Erro ao importar condomínios: " + error.message);
+      totalCondominios = condominiosClean.length;
+    }
+
+    const moradoresClean = backup.moradores.map(m => ({
+      ...limparObj(m, ["id","created_at"]),
+      nome: m.nome || m.name || m.email || "Morador",
+      email: String(m.email || "").trim().toLowerCase(),
+      role: "morador",
+      unidade: m.unidade || m.apartamento || m.unit || null,
+      condominio_id: m.condominio_id || m.condominioId || null,
+      cpf: m.cpf || null,
+      celular: m.celular || m.telefone || m.phone || null,
+      placa_veiculo: m.placa_veiculo || m.placa || null,
+      foto_placa_veiculo_url: m.foto_placa_veiculo_url || null,
+      pessoas_moram_junto: pessoasArray(m.pessoas_moram_junto || m.moradores_adicionais || m.pessoas || []),
+      ativo: m.ativo !== false
+    })).filter(m => m.id && m.email);
+
+    if(backup.moradores.length && !moradoresClean.length){
+      avisos.push("Nenhum morador foi importado porque o backup não possui ID/e-mail válido nos moradores.");
+    }
+
+    if(moradoresClean.length){
+      const { error } = await supabaseClient
+        .from("profiles")
+        .upsert(moradoresClean, { onConflict: "id" });
+      if(error) throw new Error("Erro ao importar moradores: " + error.message);
+      totalMoradores = moradoresClean.length;
+    }
+
+    const lancamentosClean = backup.lancamentos.map(l => ({
+      ...limparObj(l, ["id","created_at"]),
+      condominio_id: l.condominio_id || l.condominioId || null,
+      tipo: l.tipo === "receita" ? "receita" : "despesa",
+      data: String(l.data || new Date().toISOString().slice(0,10)).slice(0,10),
+      valor: Number(l.valor || 0),
+      categoria: l.categoria || null,
+      descricao: l.descricao || null,
+      local: l.local || null,
+      justificativa: l.justificativa || null,
+      anexo_url: l.anexo_url || null,
+      nota_url: l.nota_url || null,
+      created_by: l.created_by || null
+    })).filter(l => l.condominio_id && l.valor >= 0);
+
+    if(lancamentosClean.length){
+      const { error } = await supabaseClient
+        .from("lancamentos")
+        .upsert(lancamentosClean, { onConflict: "id" });
+      if(error) throw new Error("Erro ao importar lançamentos: " + error.message);
+      totalLancamentos = lancamentosClean.length;
     }
 
     msg($("backupImportMsg"), "Backup importado com sucesso.", "ok");
     if($("backupImportDetails")){
       $("backupImportDetails").innerHTML = `
         <div class="import-result-grid">
-          <span>🏢 Condomínios: <strong>${result.importados?.condominios ?? 0}</strong></span>
-          <span>👥 Moradores: <strong>${result.importados?.moradores ?? 0}</strong></span>
-          <span>💰 Lançamentos: <strong>${result.importados?.lancamentos ?? 0}</strong></span>
-          <span>🔐 Usuários Auth criados: <strong>${result.importados?.auth_criados ?? 0}</strong></span>
+          <span>🏢 Condomínios: <strong>${totalCondominios}</strong></span>
+          <span>👥 Moradores: <strong>${totalMoradores}</strong></span>
+          <span>💰 Lançamentos: <strong>${totalLancamentos}</strong></span>
         </div>
-        ${result.avisos?.length ? `<div class="import-warnings"><strong>Avisos:</strong><br>${result.avisos.map(escapeHtml).join("<br>")}</div>` : ""}
+        <div class="import-warnings"><strong>Observação:</strong><br>Esta importação restaura os dados do painel. Usuários de login do Supabase Authentication não são recriados por arquivo JSON; se algum morador não conseguir entrar, recrie o acesso pelo cadastro/alteração de senha.</div>
+        ${avisos.length ? `<div class="import-warnings"><strong>Avisos:</strong><br>${avisos.map(escapeHtml).join("<br>")}</div>` : ""}
       `;
     }
 
@@ -437,6 +502,7 @@ async function importarBackupJson(e){
     await carregarLancamentos();
 
   }catch(err){
+    console.error("Erro na importação direta do backup:", err);
     msg($("backupImportMsg"), err?.message || "Erro ao importar backup.", "error");
   }finally{
     input.value = "";

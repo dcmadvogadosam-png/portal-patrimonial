@@ -122,3 +122,42 @@
   .import-result-grid{grid-template-columns:1fr}
 }
 
+
+/* AJUSTE VISUAL: logo DM sem círculo externo */
+.dm-logo,
+.dm-logo.small,
+.login-brand .dm-logo,
+.side-brand .dm-logo,
+.side-brand .dm-logo.small{
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+}
+.dm-logo img,
+.dm-logo.small img,
+.login-brand .dm-logo img,
+.side-brand .dm-logo img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:contain!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  filter:none!important;
+}
+.side-brand .dm-logo.small{
+  width:44px!important;
+  height:44px!important;
+}
+.login-brand .dm-logo{
+  width:72px!important;
+  height:72px!important;
+}
+
