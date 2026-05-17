@@ -1,0 +1,9 @@
+name = "portal-patrimonial"
+compatibility_date = "2026-05-15"
+main = "_worker.js"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "."
+binding = "ASSETS"
+not_found_handling = "single-page-application"
