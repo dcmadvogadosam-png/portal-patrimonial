@@ -373,11 +373,147 @@ async function handleUpdatePassword(request, env) {
   return json({ ok: true, user_id: authUserId, morador: profile });
 }
 
+async function criarAuthPortariaUser(env, payload) {
+  const res = await supabaseFetch(env, "/auth/v1/admin/users", {
+    method: "POST",
+    body: JSON.stringify({
+      email: payload.email,
+      password: payload.password,
+      email_confirm: true,
+      user_metadata: {
+        nome: payload.nome,
+        role: "portaria",
+        condominio_id: payload.condominio_id,
+        cpf: payload.cpf,
+        celular: payload.celular
+      }
+    })
+  });
+  const data = await readJsonSafe(res);
+  if (!res.ok) {
+    const msg = data?.msg || data?.message || data?.error_description || data?.error || data?.raw || "Erro ao criar login da portaria no Supabase Auth.";
+    return { ok: false, status: res.status, error: msg, data };
+  }
+  return { ok: true, user: data };
+}
+
+async function handleCreatePortaria(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST") return json({ error: "Método não permitido. Use POST." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const admin = await assertAdmin(env, request);
+    if (!admin.ok) return admin.response;
+
+    const body = await request.json().catch(() => null);
+    const payload = {
+      nome: String(body?.nome || "").trim(),
+      cpf: String(body?.cpf || "").trim(),
+      celular: String(body?.celular || "").trim(),
+      email: String(body?.email || "").trim().toLowerCase(),
+      password: String(body?.password || body?.senha || ""),
+      condominio_id: String(body?.condominio_id || "").trim()
+    };
+    if (!payload.nome || !payload.email || !payload.password || !payload.condominio_id) return json({ error: "Preencha condomínio, nome, e-mail e senha da portaria." }, 400);
+    if (payload.password.length < 6) return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
+    const condominio = await validarCondominio(env, payload.condominio_id);
+    if (!condominio) return json({ error: "Condomínio inválido para o cadastro da portaria." }, 400);
+
+    const existingRes = await supabaseFetch(env, `/rest/v1/profiles?email=eq.${encodeURIComponent(payload.email)}&select=id,email&limit=1`, { method: "GET" });
+    const existing = await readJsonSafe(existingRes);
+    if (Array.isArray(existing) && existing.length) return json({ error: "Já existe um usuário cadastrado com este e-mail." }, 409);
+
+    const auth = await criarAuthPortariaUser(env, payload);
+    if (!auth.ok) return json({ error: auth.error, etapa: "auth.users", detalhe: auth.data }, auth.status || 500);
+    const userId = auth.user?.id;
+    if (!userId) return json({ error: "Login criado, mas o Supabase não retornou o ID do usuário." }, 500);
+
+    const profilePayload = { id: userId, nome: payload.nome, email: payload.email, role: "portaria", unidade: null, condominio_id: payload.condominio_id, cpf: payload.cpf, celular: payload.celular, placa_veiculo: null, ativo: true };
+    const profile = await upsertProfile(env, profilePayload);
+    if (!profile.ok) {
+      await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" }).catch(() => null);
+      const msg = profile.data?.message || profile.data?.error || profile.data?.raw || "Erro ao criar perfil da portaria.";
+      return json({ error: msg, etapa: "profiles", detalhe: profile.data }, profile.status || 500);
+    }
+
+    const row = { user_id: userId, condominio_id: payload.condominio_id, nome: payload.nome, cpf: payload.cpf, celular: payload.celular, email: payload.email, senha_acesso: payload.password, ativo: true };
+    const portariaRes = await supabaseFetch(env, "/rest/v1/portaria_logins", { method: "POST", body: JSON.stringify(row) });
+    const portariaData = await readJsonSafe(portariaRes);
+    if (!portariaRes.ok) {
+      await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" }).catch(() => null);
+      return json({ error: portariaData?.message || portariaData?.error || portariaData?.raw || "Erro ao salvar tabela portaria_logins.", etapa: "portaria_logins", detalhe: portariaData }, portariaRes.status || 500);
+    }
+    return json({ ok: true, user_id: userId, condominio, portaria: Array.isArray(portariaData) ? portariaData[0] : portariaData });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao criar portaria." }, 500);
+  }
+}
+
+async function handleUpdatePortaria(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST" && request.method !== "PATCH") return json({ error: "Método não permitido." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const admin = await assertAdmin(env, request);
+    if (!admin.ok) return admin.response;
+    const body = await request.json().catch(() => null);
+    const id = String(body?.id || "").trim();
+    const userId = String(body?.user_id || "").trim();
+    const payload = {
+      nome: String(body?.nome || "").trim(), cpf: String(body?.cpf || "").trim(), celular: String(body?.celular || "").trim(), email: String(body?.email || "").trim().toLowerCase(), password: String(body?.password || body?.senha || ""), condominio_id: String(body?.condominio_id || "").trim()
+    };
+    if (!id || !userId) return json({ error: "ID da portaria não informado." }, 400);
+    if (!payload.nome || !payload.email || !payload.password || !payload.condominio_id) return json({ error: "Preencha condomínio, nome, e-mail e senha." }, 400);
+    if (payload.password.length < 6) return json({ error: "A senha precisa ter pelo menos 6 caracteres." }, 400);
+
+    const authRes = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "PATCH", body: JSON.stringify({ email: payload.email, password: payload.password, email_confirm: true, user_metadata: { nome: payload.nome, role: "portaria", condominio_id: payload.condominio_id, cpf: payload.cpf, celular: payload.celular } }) });
+    const authData = await readJsonSafe(authRes);
+    if (!authRes.ok) return json({ error: authData?.message || authData?.error || authData?.raw || "Erro ao atualizar Auth da portaria.", detalhe: authData }, authRes.status);
+
+    const profile = await upsertProfile(env, { id: userId, nome: payload.nome, email: payload.email, role: "portaria", condominio_id: payload.condominio_id, cpf: payload.cpf, celular: payload.celular, ativo: true });
+    if (!profile.ok) return json({ error: profile.data?.message || profile.data?.error || "Erro ao atualizar perfil da portaria.", detalhe: profile.data }, profile.status || 500);
+
+    const rowRes = await supabaseFetch(env, `/rest/v1/portaria_logins?id=eq.${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ nome: payload.nome, cpf: payload.cpf, celular: payload.celular, email: payload.email, senha_acesso: payload.password, condominio_id: payload.condominio_id, user_id: userId, ativo: true }) });
+    const rowData = await readJsonSafe(rowRes);
+    if (!rowRes.ok) return json({ error: rowData?.message || rowData?.error || rowData?.raw || "Erro ao atualizar tabela da portaria.", detalhe: rowData }, rowRes.status);
+    return json({ ok: true });
+  } catch (err) { return json({ error: err?.message || "Erro interno ao atualizar portaria." }, 500); }
+}
+
+async function handleDeletePortaria(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST" && request.method !== "DELETE") return json({ error: "Método não permitido." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const admin = await assertAdmin(env, request);
+    if (!admin.ok) return admin.response;
+    const body = await request.json().catch(() => null);
+    const id = String(body?.id || "").trim();
+    const userId = String(body?.user_id || "").trim();
+    if (!id && !userId) return json({ error: "Informe o ID do cadastro da portaria." }, 400);
+    if (id) await supabaseFetch(env, `/rest/v1/portaria_logins?id=eq.${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (userId) {
+      const res = await supabaseFetch(env, `/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await readJsonSafe(res);
+        return json({ error: data?.message || data?.error || data?.raw || "Erro ao remover usuário da portaria no Auth.", detalhe: data }, res.status);
+      }
+    }
+    return json({ ok: true });
+  } catch (err) { return json({ error: err?.message || "Erro interno ao remover portaria." }, 500); }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
+    if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
+    if (url.pathname === "/api/update-portaria") return handleUpdatePortaria(request, env);
+    if (url.pathname === "/api/delete-portaria") return handleDeletePortaria(request, env);
     if (url.pathname === "/api/delete-user") return handleDeleteUser(request, env);
     if (url.pathname === "/api/update-password") return handleUpdatePassword(request, env);
     if (url.pathname === "/api/health") {
@@ -386,8 +522,8 @@ export default {
         ok: missing.length === 0,
         missing,
         mode: "worker-assets",
-        routes: ["/api/create-user", "/api/delete-user", "/api/update-password"],
-        database_required: ["condominios", "profiles", "lancamentos", "anexos", "storage.documentos"]
+        routes: ["/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password"],
+        database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }
 

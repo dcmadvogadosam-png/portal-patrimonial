@@ -12,6 +12,8 @@ let profile = null;
 let condominios = [];
 let lancamentos = [];
 let moradores = [];
+let portarias = [];
+let whatsappMoradorAtual = null;
 
 function msg(el, text, type = "") { if (el) { el.textContent = text || ""; el.className = `message ${type}`; } }
 function show(el) { el?.classList.remove("hidden"); }
@@ -44,8 +46,10 @@ function requireConfig() {
 function bindBasicEvents() {
   $("tabMorador")?.addEventListener("click", () => switchLoginTab("morador"));
   $("tabAdmin")?.addEventListener("click", () => switchLoginTab("admin"));
+  $("tabPortaria")?.addEventListener("click", () => switchLoginTab("portaria"));
   $("loginBtn")?.addEventListener("click", loginMorador);
   $("adminLoginBtn")?.addEventListener("click", loginAdmin);
+  $("portariaLoginBtn")?.addEventListener("click", loginPortaria);
   $("logoutBtn")?.addEventListener("click", logout);
   $("printBtn")?.addEventListener("click", () => window.print());
   $("mobileMenuBtn")?.addEventListener("click", () => $("adminSidebar")?.classList.toggle("open"));
@@ -57,6 +61,12 @@ function bindBasicEvents() {
   $("pesquisarSenhaMorador")?.addEventListener("click", popularMoradoresSenha);
   $("senhaBuscaMorador")?.addEventListener("input", popularMoradoresSenha);
   $("alterarSenhaMoradorBtn")?.addEventListener("click", alterarSenhaMorador);
+  $("formPortaria")?.addEventListener("submit", criarPortaria);
+  $("verificarPortariaBtn")?.addEventListener("click", renderPortariaTable);
+  $("buscaPortariaMorador")?.addEventListener("input", renderPortariaMoradores);
+  $("closeWhatsapp")?.addEventListener("click", () => hide($("whatsappModal")));
+  $("whatsappModal")?.addEventListener("click", (e) => { if (e.target?.id === "whatsappModal") hide($("whatsappModal")); });
+  $("enviarWhatsappBtn")?.addEventListener("click", enviarWhatsappMorador);
   $("closeDetail")?.addEventListener("click", () => hide($("detailModal")));
   $("detailModal")?.addEventListener("click", (e) => { if (e.target?.id === "detailModal") hide($("detailModal")); });
   $("formCondominio")?.addEventListener("submit", criarCondominio);
@@ -76,8 +86,10 @@ function bindBasicEvents() {
 function switchLoginTab(tab){
   $("tabMorador")?.classList.toggle("active", tab === "morador");
   $("tabAdmin")?.classList.toggle("active", tab === "admin");
+  $("tabPortaria")?.classList.toggle("active", tab === "portaria");
   $("moradorLoginBox")?.classList.toggle("hidden", tab !== "morador");
   $("adminLoginBox")?.classList.toggle("hidden", tab !== "admin");
+  $("portariaLoginBox")?.classList.toggle("hidden", tab !== "portaria");
 }
 function setAdminTab(tab){
   document.querySelectorAll("[data-admin-tab]").forEach(b => b.classList.toggle("active", b.dataset.adminTab === tab));
@@ -106,7 +118,7 @@ async function carregarCondominios() {
 
 function popularSelects() {
   const options = `<option value="">Selecione o condomínio</option>` + condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("");
-  ["loginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
+  ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
 }
 
 async function loginMorador() {
@@ -132,6 +144,19 @@ async function loginAdmin() {
   await abrirDashboard();
 }
 
+async function loginPortaria() {
+  msg($("portariaLoginMsg"), "");
+  const email = $("portariaEmail")?.value?.trim(); const password = $("portariaSenha")?.value || ""; const condominioId = $("portariaLoginCondominio")?.value || "";
+  if (!email || !password || !condominioId) return msg($("portariaLoginMsg"), "Informe condomínio, e-mail e senha da portaria.", "error");
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return msg($("portariaLoginMsg"), "Login inválido: " + error.message, "error");
+  currentUser = data.user; await carregarPerfil();
+  if (!profile) { await logout(); return; }
+  if (profile.role !== "portaria") { await supabaseClient.auth.signOut(); return msg($("portariaLoginMsg"), "Este login não possui permissão de portaria.", "error"); }
+  if (profile.condominio_id !== condominioId) { await supabaseClient.auth.signOut(); return msg($("portariaLoginMsg"), "Este login da portaria não pertence ao condomínio selecionado.", "error"); }
+  await abrirDashboard();
+}
+
 async function carregarPerfil() {
   const { data, error } = await supabaseClient.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
   if (error || !data) { profile = null; msg($("loginMsg"), "Perfil não encontrado. Verifique se o usuário foi cadastrado na tabela profiles.", "error"); return; }
@@ -142,21 +167,25 @@ async function carregarPerfil() {
 async function abrirDashboard() {
   hide($("loginScreen")); show($("dashboardScreen"));
   const isAdmin = profile?.role === "admin";
+  const isPortaria = profile?.role === "portaria";
   $("dashboardScreen").classList.toggle("is-admin", isAdmin);
-  $("dashboardScreen").classList.toggle("is-resident", !isAdmin);
+  $("dashboardScreen").classList.toggle("is-resident", !isAdmin && !isPortaria);
+  $("dashboardScreen").classList.toggle("is-portaria", isPortaria);
   $("adminSidebar")?.classList.toggle("hidden", !isAdmin);
   $("adminPanel")?.classList.toggle("hidden", !isAdmin);
-  $("recordsSection")?.classList.toggle("hidden", false);
-  $("sessionLabel").textContent = currentUser.email;
-  $("sessionRole").textContent = isAdmin ? "Administrador" : "Morador";
-  $("userRoleLabel").textContent = isAdmin ? "Administrador geral" : `Morador | Unidade ${profile.unidade || "-"}`;
+  $("recordsSection")?.classList.toggle("hidden", isPortaria);
+  $("portariaPanel")?.classList.toggle("hidden", !isPortaria);
+  $("sessionLabel").textContent = profile?.nome || currentUser.email;
+  $("sessionRole").textContent = isAdmin ? "Administrador" : (isPortaria ? "Portaria" : "Morador");
+  $("userRoleLabel").textContent = isAdmin ? "Administrador geral" : (isPortaria ? "Acesso da portaria" : `Morador | Unidade ${profile.unidade || "-"}`);
   if (!isAdmin && $("filterTipo")) { $("filterTipo").value = "despesa"; $("filterTipo").disabled = true; }
   if (isAdmin && $("filterTipo")) { $("filterTipo").disabled = false; }
   const condominio = isAdmin ? { nome: "Todos os condomínios" } : condominios.find(c => c.id === profile.condominio_id);
   $("condominioTitulo").textContent = condominio?.nome || "Condomínio";
+  if (isPortaria) { await carregarMoradoresPortaria(); renderResumo(); return; }
   await carregarLancamentos();
-  if (isAdmin) await carregarMoradores();
-  renderResumo(); setAdminTab("condominios");
+  if (isAdmin) { await carregarMoradores(); await carregarPortarias(); }
+  renderResumo(); if(isAdmin) setAdminTab("condominios");
 }
 
 async function logout(){ if(supabaseClient) await supabaseClient.auth.signOut(); window.location.reload(); }
@@ -164,7 +193,17 @@ async function logout(){ if(supabaseClient) await supabaseClient.auth.signOut();
 async function carregarMoradores() {
   const { data, error } = await supabaseClient.from("profiles").select("*").eq("role","morador").order("nome", { ascending: true });
   moradores = error ? [] : (data || []);
-  popularMoradores(); renderMoradoresTable(); renderResumo(); renderCondominiosTable();
+  popularMoradores(); renderMoradoresTable(); renderResumo(); renderCondominiosTable(); renderPortariaMoradores();
+}
+async function carregarMoradoresPortaria(){
+  const { data, error } = await supabaseClient.from("profiles").select("*").eq("role","morador").eq("condominio_id", profile.condominio_id).order("nome", { ascending: true });
+  moradores = error ? [] : (data || []);
+  renderPortariaMoradores();
+}
+async function carregarPortarias(){
+  const { data, error } = await supabaseClient.from("portaria_logins").select("*").order("nome", { ascending: true });
+  portarias = error ? [] : (data || []);
+  renderPortariaTable();
 }
 function popularMoradores(){
   const el=$("removerMorador");
@@ -296,6 +335,50 @@ async function criarMorador(e){
     msg($("adminMsg"), error?.message || "Erro ao criar morador.","error");
   }
 }
+
+function renderPortariaTable(){
+  const tbody=$("portariaTable"); if(!tbody) return;
+  const cond=$("gestaoPortariaCondominio")?.value || "";
+  let lista=[...portarias]; if(cond) lista=lista.filter(p=>p.condominio_id===cond);
+  const rows=lista.map(p=>{ const condNome=condominios.find(c=>c.id===p.condominio_id)?.nome || "-"; return `<tr><td><strong>${escapeHtml(p.nome||"-")}</strong></td><td>${escapeHtml(p.cpf||"-")}</td><td>${escapeHtml(p.celular||"-")}</td><td>${escapeHtml(p.email||"-")}</td><td><code>${escapeHtml(p.senha_acesso||"-")}</code></td><td>${escapeHtml(condNome)}</td><td><button class="table-action" onclick="editarPortaria('${p.id}')">Editar</button> <button class="table-action danger-action" onclick="removerPortaria('${p.id}')">Remover</button></td></tr>`; }).join("");
+  tbody.innerHTML = rows || `<tr><td colspan="7">Nenhum login de portaria encontrado para o filtro selecionado.</td></tr>`;
+}
+async function criarPortaria(e){
+  e.preventDefault(); msg($("adminMsg"),"");
+  const payload={condominio_id:$("portariaCondominio")?.value||"", nome:$("porteiroNome")?.value?.trim()||"", cpf:$("porteiroCpf")?.value?.trim()||"", celular:$("porteiroCelular")?.value?.trim()||"", email:$("porteiroEmail")?.value?.trim().toLowerCase()||"", password:$("porteiroSenha")?.value||""};
+  if(!payload.condominio_id||!payload.nome||!payload.email||!payload.password) return msg($("adminMsg"),"Preencha condomínio, nome, e-mail e senha da portaria.","error");
+  if(payload.password.length<6) return msg($("adminMsg"),"A senha precisa ter pelo menos 6 caracteres.","error");
+  const {data:sessionData}=await supabaseClient.auth.getSession(); const token=sessionData?.session?.access_token;
+  const res=await fetch("/api/create-portaria",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(payload)});
+  const result=await res.json().catch(()=>({})); if(!res.ok) return msg($("adminMsg"), result.error||"Erro ao criar login da portaria.", "error");
+  e.target.reset(); await carregarPortarias(); msg($("adminMsg"),"Login da portaria criado com sucesso.","ok");
+}
+window.editarPortaria=async function(id){
+  const p=portarias.find(x=>x.id===id); if(!p) return;
+  const nome=prompt("Nome do porteiro(a):",p.nome||""); if(nome===null)return; const cpf=prompt("CPF:",p.cpf||""); if(cpf===null)return; const celular=prompt("Celular:",p.celular||""); if(celular===null)return; const email=prompt("E-mail de login:",p.email||""); if(email===null)return; const senha=prompt("Senha de acesso:",p.senha_acesso||""); if(senha===null)return;
+  if(String(senha).length<6) return msg($("adminMsg"),"A senha precisa ter pelo menos 6 caracteres.","error");
+  const {data:sessionData}=await supabaseClient.auth.getSession(); const token=sessionData?.session?.access_token;
+  const res=await fetch("/api/update-portaria",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({id,nome,cpf,celular,email,password:senha,condominio_id:p.condominio_id,user_id:p.user_id})});
+  const result=await res.json().catch(()=>({})); if(!res.ok) return msg($("adminMsg"), result.error||"Erro ao atualizar portaria.", "error");
+  await carregarPortarias(); msg($("adminMsg"),"Cadastro da portaria atualizado.","ok");
+};
+window.removerPortaria=async function(id){
+  const p=portarias.find(x=>x.id===id); if(!p)return; if(!confirm(`Remover o login da portaria de ${p.nome||p.email}?`))return;
+  const {data:sessionData}=await supabaseClient.auth.getSession(); const token=sessionData?.session?.access_token;
+  const res=await fetch("/api/delete-portaria",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify({id,user_id:p.user_id})});
+  const result=await res.json().catch(()=>({})); if(!res.ok) return msg($("adminMsg"), result.error||"Erro ao remover portaria.", "error");
+  await carregarPortarias(); msg($("adminMsg"),"Login da portaria removido.","ok");
+};
+function renderPortariaMoradores(){
+  const tbody=$("portariaMoradoresTable"); if(!tbody)return; const busca=($("buscaPortariaMorador")?.value||"").toLowerCase().trim(); let lista=[...moradores]; if(profile?.role==="portaria") lista=lista.filter(m=>m.condominio_id===profile.condominio_id);
+  if(busca) lista=lista.filter(m=>[m.nome,m.cpf,m.unidade,m.celular,m.placa_veiculo,m.email,Array.isArray(m.pessoas_moram_junto)?m.pessoas_moram_junto.join(" "):m.pessoas_moram_junto].join(" ").toLowerCase().includes(busca));
+  const rows=lista.map(m=>{ const tel=m.celular||""; const telHtml=tel?`<button class="phone-link" onclick="abrirWhatsappMorador('${m.id}')">${escapeHtml(tel)}</button>`:"-"; return `<tr><td><strong>${escapeHtml(m.nome||"-")}</strong></td><td>${escapeHtml(m.cpf||"-")}</td><td>${escapeHtml(m.unidade||"-")}</td><td>${telHtml}</td><td>${escapeHtml(m.placa_veiculo||"-")}</td><td>${escapeHtml(m.email||"-")}</td><td>${formatPessoasMoramJunto(m.pessoas_moram_junto)}</td></tr>`; }).join("");
+  tbody.innerHTML=rows||`<tr><td colspan="7">Nenhum morador encontrado.</td></tr>`;
+}
+window.abrirWhatsappMorador=function(id){ const m=moradores.find(x=>x.id===id); if(!m)return; whatsappMoradorAtual=m; $("whatsappMoradorNome").textContent=`Enviar WhatsApp para ${m.nome||"morador"}`; $("whatsappAssunto").value=""; $("whatsappDescricao").value=""; show($("whatsappModal")); };
+function enviarWhatsappMorador(){ if(!whatsappMoradorAtual?.celular)return; const assunto=($("whatsappAssunto")?.value||"").trim(); const descricao=($("whatsappDescricao")?.value||"").trim(); if(!assunto||!descricao)return alert("Digite o assunto e a descrição da mensagem."); const numero=String(whatsappMoradorAtual.celular).replace(/\D/g,""); const finalNumero=numero.startsWith("55")?numero:`55${numero}`; const texto=`Assunto: ${assunto}
+
+${descricao}`; window.open(`https://wa.me/${finalNumero}?text=${encodeURIComponent(texto)}`,"_blank"); hide($("whatsappModal")); }
 
 async function uploadFile(file, folder){ if(!file) return null; const ext=file.name.split('.').pop(); const path=`${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`; const {error}=await supabaseClient.storage.from("documentos").upload(path,file,{upsert:false}); if(error){console.warn(error); return null;} const {data}=supabaseClient.storage.from("documentos").getPublicUrl(path); return data?.publicUrl || null; }
 
@@ -517,6 +600,7 @@ function backupJson(){
     gerado_em:new Date().toISOString(),
     condominios,
     moradores,
+    portarias,
     lancamentos
   },null,2), "application/json");
 }

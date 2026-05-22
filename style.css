@@ -161,3 +161,20 @@
   height:72px!important;
 }
 
+
+
+/* ===== Ajustes Portaria ===== */
+.tabs-login{grid-template-columns:repeat(3,1fr)}
+.danger-action{background:#fff0f0!important;color:#c01414!important;margin-left:6px}
+.app-shell.is-portaria{display:block;min-height:100vh;background:linear-gradient(135deg,#edf4ff,#ffffff)}
+.app-shell.is-portaria .main-panel{max-width:1280px;margin:0 auto;padding:28px clamp(16px,3vw,38px) 70px}
+.app-shell.is-portaria .admin-topbar{background:linear-gradient(135deg,#031f45,#0a4aa5);border-radius:28px;padding:24px;color:#fff;box-shadow:0 24px 70px rgba(3,31,69,.18)}
+.app-shell.is-portaria .resident-title{display:block!important;color:#fff}
+.app-shell.is-portaria .resident-title .eyebrow{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.22)}
+.app-shell.is-portaria .resident-title h2{color:#fff;margin:12px 0 6px}
+.app-shell.is-portaria .resident-title p{color:#d8e8ff;font-weight:800}
+.app-shell.is-portaria .user-box{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18)}
+.app-shell.is-portaria .btn-logout{background:#fff;color:#06346f}
+.app-shell.is-portaria .metrics-grid,.app-shell.is-portaria #recordsSection{display:none!important}
+.phone-link{border:0;background:#e9f6ff;color:#075ca8;border-radius:999px;padding:8px 12px;font-weight:900;cursor:pointer}.phone-link:hover{text-decoration:underline}.whatsapp-card label{display:block;margin:14px 0 7px;font-weight:900}.whatsapp-card input,.whatsapp-card textarea{width:100%;border:1px solid #d5e0ee;border-radius:14px;padding:14px 15px;outline:none}.whatsapp-card textarea{min-height:140px;resize:vertical;margin-bottom:15px}
+@media(max-width:760px){.tabs-login{grid-template-columns:1fr}.app-shell.is-portaria .admin-topbar{padding:18px;border-radius:22px}.app-shell.is-portaria .user-box{width:100%;justify-content:space-between}}

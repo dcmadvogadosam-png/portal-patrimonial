@@ -37,6 +37,7 @@
             <div class="tabs-login">
               <button id="tabMorador" class="active" type="button">Morador</button>
               <button id="tabAdmin" type="button">Administrador</button>
+              <button id="tabPortaria" type="button">Portaria</button>
             </div>
 
             <div id="moradorLoginBox">
@@ -62,6 +63,19 @@
               <button id="adminLoginBtn" class="btn btn-primary full">Entrar no painel administrativo</button>
               <p id="adminLoginMsg" class="message"></p>
             </div>
+
+            <div id="portariaLoginBox" class="hidden">
+              <h3>Área da portaria</h3>
+              <p>Selecione o condomínio vinculado ao cadastro da portaria e informe o acesso.</p>
+              <label>Condomínio</label>
+              <select id="portariaLoginCondominio"></select>
+              <label>E-mail da portaria</label>
+              <input id="portariaEmail" type="email" placeholder="portaria@condominio.com" />
+              <label>Senha</label>
+              <input id="portariaSenha" type="password" placeholder="Digite a senha" />
+              <button id="portariaLoginBtn" class="btn btn-primary full">Entrar como portaria</button>
+              <p id="portariaLoginMsg" class="message"></p>
+            </div>
           </div>
         </div>
       </div>
@@ -81,6 +95,7 @@
         <nav class="side-nav">
           <button class="nav-item active" data-admin-tab="condominios" type="button">🏢 <span>Condomínios</span></button>
           <button class="nav-item" data-admin-tab="moradores" type="button">👥 <span>Moradores</span></button>
+          <button class="nav-item" data-admin-tab="portaria" type="button">🛎️ <span>Portaria</span></button>
           <button class="nav-item" data-admin-tab="relatorios" type="button">📄 <span>Relatórios e Backup</span></button>
           <button class="nav-item" data-admin-tab="lancamentos" type="button">💰 <span>Lançamentos</span></button>
           <button class="nav-item" data-admin-tab="remocoes" type="button">🗑️ <span>Remoções</span></button>
@@ -186,6 +201,28 @@
             <div class="table-card"><h3>Moradores cadastrados</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Unidade</th><th>Condomínio</th><th>Pessoas que moram junto</th><th>Placa</th><th>Foto</th><th>Status</th></tr></thead><tbody id="moradoresTable"></tbody></table></div></div>
           </section>
 
+          <section class="module-card admin-tab-panel hidden" data-panel="portaria">
+            <div class="module-head"><div><h2>🛎️ Acessos da Portaria</h2><p>Cadastre porteiros por condomínio e gerencie login, senha, edição e remoção.</p></div></div>
+            <form id="formPortaria" class="form-grid action-card accent-blue">
+              <select id="portariaCondominio" required></select>
+              <input id="porteiroNome" placeholder="Nome do porteiro(a)" required />
+              <input id="porteiroCpf" placeholder="CPF" />
+              <input id="porteiroCelular" placeholder="Número de celular" />
+              <input id="porteiroEmail" type="email" placeholder="E-mail para login" required />
+              <input id="porteiroSenha" type="text" placeholder="Senha de acesso" required />
+              <button class="btn btn-primary span-2" type="submit">🛎️ Criar login da portaria</button>
+            </form>
+            <div class="action-card accent-gold password-manager-card">
+              <h3><span>🔎</span>Gestão de logins da portaria</h3>
+              <p>Selecione o condomínio e clique em verificar para listar os cadastros da portaria.</p>
+              <div class="form-grid password-grid">
+                <select id="gestaoPortariaCondominio"><option value="">Selecione o condomínio</option></select>
+                <button id="verificarPortariaBtn" class="btn btn-secondary" type="button">Verificar logins</button>
+              </div>
+            </div>
+            <div class="table-card"><h3>Logins de portaria cadastrados</h3><div class="table-wrap"><table><thead><tr><th>Nome</th><th>CPF</th><th>Celular</th><th>E-mail/Login</th><th>Senha</th><th>Condomínio</th><th>Ações</th></tr></thead><tbody id="portariaTable"></tbody></table></div></div>
+          </section>
+
           <section class="module-card admin-tab-panel hidden" data-panel="relatorios">
             <div class="module-head"><div><h2>📄 Relatórios e Backup</h2><p>Exporte dados do portal e gere relatórios rápidos para conferência.</p></div></div>
             <div class="report-grid">
@@ -228,6 +265,14 @@
           <p id="adminMsg" class="message admin-message"></p>
         </section>
 
+        <section id="portariaPanel" class="records-section hidden">
+          <div class="section-row">
+            <div><h2>🛎️ Painel da Portaria</h2><p>Visualize moradores, telefones e veículos vinculados ao condomínio.</p></div>
+            <div class="filters"><input id="buscaPortariaMorador" placeholder="Buscar por nome, CPF, unidade, telefone, placa, e-mail ou pessoas vinculadas" /></div>
+          </div>
+          <div class="table-card"><h3>Moradores do condomínio</h3><div class="table-wrap"><table><thead><tr><th>Morador</th><th>CPF</th><th>Unidade</th><th>Telefone</th><th>Placa</th><th>E-mail</th><th>Pessoas vinculadas</th></tr></thead><tbody id="portariaMoradoresTable"></tbody></table></div></div>
+        </section>
+
         <section id="recordsSection" class="records-section">
           <div class="section-row">
             <div><h2>Lançamentos e documentos</h2><p>Consulte despesas, comprovantes e justificativas do condomínio.</p></div>
@@ -243,6 +288,19 @@
     <div class="modal-card">
       <button id="closeDetail" class="modal-close">×</button>
       <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <div id="whatsappModal" class="modal hidden">
+    <div class="modal-card whatsapp-card">
+      <button id="closeWhatsapp" class="modal-close">×</button>
+      <span class="pill">Mensagem para morador</span>
+      <h2 id="whatsappMoradorNome">Enviar WhatsApp</h2>
+      <label>Assunto</label>
+      <input id="whatsappAssunto" placeholder="Ex.: Visitante na portaria" />
+      <label>Descrição da mensagem</label>
+      <textarea id="whatsappDescricao" placeholder="Digite a mensagem que será enviada ao WhatsApp do morador"></textarea>
+      <button id="enviarWhatsappBtn" class="btn btn-primary full" type="button">Enviar pelo WhatsApp</button>
     </div>
   </div>
 
