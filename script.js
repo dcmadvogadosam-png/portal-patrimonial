@@ -451,9 +451,13 @@ async function criarLancamento(e){
     const condominio_id=$("lanCondominio").value; const tipo=$("lanTipo")?.value||"despesa"; const data=$("lanData").value; const valor=Number($("lanValor").value||0); const categoria=$("lanCategoria").value.trim(); const local=$("lanLocal").value.trim(); const justificativa=$("lanJustificativa").value.trim();
     if(!condominio_id||!data||!valor) return msg($("adminMsg"),"Selecione condomínio, data e valor.","error");
     const anexo=await uploadFile($("lanAnexo")?.files?.[0],`condominios/${condominio_id}/anexos`);
-    const payload={condominio_id,tipo,data,valor,categoria,local,descricao:categoria||local||tipo,justificativa,created_by:currentUser?.id};
+    const payload={condominio_id,tipo,data,valor,categoria,local,descricao:categoria||local||tipo,justificativa};
     if(anexo) payload.anexo_url=anexo;
-    const {error}=await supabaseClient.from("lancamentos").insert(payload); if(error) throw error;
+    const {data:sessionData}=await supabaseClient.auth.getSession();
+    const token=sessionData?.session?.access_token;
+    const res=await fetch("/api/save-lancamento",{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(payload)});
+    const result=await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(result.error || `Erro ao salvar lançamento. Status ${res.status}`);
     e.target.reset(); $("lanAnexoNome").textContent="Nenhum arquivo selecionado"; await carregarLancamentos(); msg($("adminMsg"),"Lançamento salvo com sucesso.","ok");
   }catch(err){ msg($("adminMsg"),"Erro ao salvar lançamento: "+err.message,"error"); }
 }

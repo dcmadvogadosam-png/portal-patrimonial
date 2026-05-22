@@ -91,6 +91,49 @@ async function validarCondominio(env, condominio_id) {
   return Array.isArray(data) && data.length ? data[0] : null;
 }
 
+
+
+async function listarAuthUsersPorRole(env, role) {
+  const out = [];
+  for (let page = 1; page <= 10; page++) {
+    const res = await supabaseFetch(env, `/auth/v1/admin/users?page=${page}&per_page=100`, { method: "GET" });
+    const data = await readJsonSafe(res);
+    const users = Array.isArray(data?.users) ? data.users : (Array.isArray(data) ? data : []);
+    users.forEach(u => {
+      const meta = u.user_metadata || u.raw_user_meta_data || {};
+      if (String(meta.role || "").toLowerCase() === role) {
+        out.push({
+          id: u.id,
+          email: String(u.email || "").toLowerCase(),
+          nome: meta.nome || u.email || "Morador",
+          role,
+          unidade: meta.unidade || "",
+          condominio_id: meta.condominio_id || null,
+          cpf: meta.cpf || "",
+          celular: meta.celular || "",
+          placa_veiculo: meta.placa_veiculo || "",
+          pessoas_moram_junto: meta.pessoas_moram_junto || [],
+          ativo: true,
+          origem: "auth_metadata"
+        });
+      }
+    });
+    if (!users.length || users.length < 100) break;
+  }
+  return out;
+}
+
+function mergeMoradoresProfilesAuth(profileRows, authRows) {
+  const map = new Map();
+  [...(Array.isArray(profileRows) ? profileRows : []), ...(Array.isArray(authRows) ? authRows : [])].forEach(row => {
+    if (!row) return;
+    const key = String(row.id || row.email || Math.random()).toLowerCase();
+    const prev = map.get(key) || {};
+    map.set(key, { ...row, ...prev, ...Object.fromEntries(Object.entries(row).filter(([_,v]) => v !== null && v !== undefined && v !== "")) });
+  });
+  return [...map.values()].filter(m => String(m.role || "").toLowerCase() === "morador");
+}
+
 async function criarAuthUser(env, payload) {
   const res = await supabaseFetch(env, "/auth/v1/admin/users", {
     method: "POST",
@@ -541,23 +584,29 @@ async function handleListMoradores(request, env) {
     if (!auth.ok) return auth.response;
 
     const url = new URL(request.url);
-    const role = auth.profile.role;
-    let path = `/rest/v1/profiles?role=eq.morador&select=*&order=nome.asc`;
+    const role = String(auth.profile.role || "").toLowerCase();
+    const condFiltro = String(url.searchParams.get("condominio_id") || "").trim();
+
+    // Busca robusta: primeiro lê profiles com service_role. Se algum cadastro criou login em Auth,
+    // mas por qualquer motivo não apareceu no profiles, complementa pela metadata do Auth.
+    const profileRes = await supabaseFetch(env, `/rest/v1/profiles?select=*&order=nome.asc`, { method: "GET" });
+    const profileRowsRaw = await readJsonSafe(profileRes);
+    if (!profileRes.ok) return json({ error: profileRowsRaw?.message || profileRowsRaw?.error || profileRowsRaw?.raw || "Erro ao listar profiles.", detalhe: profileRowsRaw }, profileRes.status);
+
+    const authRows = await listarAuthUsersPorRole(env, "morador").catch(() => []);
+    let lista = mergeMoradoresProfilesAuth(profileRowsRaw, authRows);
 
     if (role === "admin") {
-      const cond = String(url.searchParams.get("condominio_id") || "").trim();
-      if (cond) path = `/rest/v1/profiles?role=eq.morador&condominio_id=eq.${encodeURIComponent(cond)}&select=*&order=nome.asc`;
+      if (condFiltro) lista = lista.filter(m => String(m.condominio_id || "") === condFiltro);
     } else if (role === "portaria" || role === "morador") {
       if (!auth.profile.condominio_id) return json({ error: "Este usuário não está vinculado a um condomínio." }, 400);
-      path = `/rest/v1/profiles?role=eq.morador&condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*&order=nome.asc`;
+      lista = lista.filter(m => String(m.condominio_id || "") === String(auth.profile.condominio_id));
     } else {
       return json({ error: "Tipo de perfil sem permissão para listar moradores." }, 403);
     }
 
-    const res = await supabaseFetch(env, path, { method: "GET" });
-    const data = await readJsonSafe(res);
-    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao listar moradores.", detalhe: data }, res.status);
-    return json({ ok: true, data: Array.isArray(data) ? data : [] });
+    lista.sort((a,b) => String(a.nome || a.email || "").localeCompare(String(b.nome || b.email || ""), "pt-BR"));
+    return json({ ok: true, data: lista });
   } catch (err) {
     return json({ error: err?.message || "Erro interno ao listar moradores." }, 500);
   }
@@ -573,18 +622,57 @@ async function handleListLancamentos(request, env) {
     const auth = await assertAuthenticatedProfile(env, request);
     if (!auth.ok) return auth.response;
 
-    let path = `/rest/v1/lancamentos?select=*,condominios(nome)&order=data.desc`;
-    if (auth.profile.role !== "admin") {
+    let path = `/rest/v1/lancamentos?select=*&order=data.desc`;
+    if (String(auth.profile.role || "").toLowerCase() !== "admin") {
       if (!auth.profile.condominio_id) return json({ error: "Este usuário não está vinculado a um condomínio." }, 400);
-      path = `/rest/v1/lancamentos?condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*,condominios(nome)&order=data.desc`;
+      path = `/rest/v1/lancamentos?condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*&order=data.desc`;
     }
 
     const res = await supabaseFetch(env, path, { method: "GET" });
     const data = await readJsonSafe(res);
     if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao listar lançamentos.", detalhe: data }, res.status);
-    return json({ ok: true, data: Array.isArray(data) ? data : [] });
+
+    let rows = Array.isArray(data) ? data : [];
+    // Anexa o nome do condomínio sem depender de relationship automática do Supabase.
+    const condRes = await supabaseFetch(env, `/rest/v1/condominios?select=id,nome`, { method: "GET" });
+    const condData = await readJsonSafe(condRes);
+    const condMap = new Map((Array.isArray(condData) ? condData : []).map(c => [String(c.id), c.nome]));
+    rows = rows.map(l => ({ ...l, condominios: l.condominios || { nome: condMap.get(String(l.condominio_id)) || "" } }));
+
+    return json({ ok: true, data: rows });
   } catch (err) {
     return json({ error: err?.message || "Erro interno ao listar lançamentos." }, 500);
+  }
+}
+
+async function handleSaveLancamento(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST") return json({ error: "Método não permitido. Use POST." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const admin = await assertAdmin(env, request);
+    if (!admin.ok) return admin.response;
+    const body = await request.json().catch(() => null);
+    const payload = {
+      condominio_id: String(body?.condominio_id || "").trim(),
+      tipo: String(body?.tipo || "despesa").trim(),
+      data: String(body?.data || "").trim(),
+      valor: Number(body?.valor || 0),
+      categoria: String(body?.categoria || "").trim(),
+      local: String(body?.local || "").trim(),
+      descricao: String(body?.descricao || body?.categoria || body?.local || body?.tipo || "").trim(),
+      justificativa: String(body?.justificativa || "").trim(),
+      created_by: admin.user.id
+    };
+    if (body?.anexo_url) payload.anexo_url = String(body.anexo_url);
+    if (!payload.condominio_id || !payload.data || !payload.valor) return json({ error: "Selecione condomínio, data e valor." }, 400);
+    const res = await supabaseFetch(env, "/rest/v1/lancamentos", { method: "POST", body: JSON.stringify(payload) });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao salvar lançamento.", detalhe: data }, res.status);
+    return json({ ok: true, data: Array.isArray(data) ? data[0] : data });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao salvar lançamento." }, 500);
   }
 }
 
@@ -654,6 +742,7 @@ export default {
     if (url.pathname === "/api/me") return handleMe(request, env);
     if (url.pathname === "/api/list-moradores") return handleListMoradores(request, env);
     if (url.pathname === "/api/list-lancamentos") return handleListLancamentos(request, env);
+    if (url.pathname === "/api/save-lancamento") return handleSaveLancamento(request, env);
     if (url.pathname === "/api/list-portarias") return handleListPortarias(request, env);
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
@@ -667,7 +756,8 @@ export default {
         ok: missing.length === 0,
         missing,
         mode: "worker-assets",
-        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password"],
+        version: "corrigido-rotas-listagem-2026-05-22",
+        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/save-lancamento", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password"],
         database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }
