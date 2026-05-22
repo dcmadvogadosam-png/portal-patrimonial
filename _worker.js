@@ -506,10 +506,52 @@ async function handleDeletePortaria(request, env) {
   } catch (err) { return json({ error: err?.message || "Erro interno ao remover portaria." }, 500); }
 }
 
+async function handleMe(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "GET") return json({ error: "Método não permitido. Use GET." }, 405);
+
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+
+    const user = await getLoggedUser(env, request);
+    if (!user?.id) return json({ error: "Sessão inválida ou expirada. Faça login novamente." }, 401);
+
+    // Busca com service_role para não depender das policies/RLS da tabela profiles.
+    // Primeiro tenta pelo UUID do Auth. Se houver cadastro antigo desalinhado, tenta pelo e-mail.
+    let res = await supabaseFetch(
+      env,
+      `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=*&limit=1`,
+      { method: "GET" }
+    );
+    let rows = await readJsonSafe(res);
+    let profile = Array.isArray(rows) ? rows[0] : null;
+
+    if (!profile && user.email) {
+      res = await supabaseFetch(
+        env,
+        `/rest/v1/profiles?email=eq.${encodeURIComponent(String(user.email).toLowerCase())}&select=*&limit=1`,
+        { method: "GET" }
+      );
+      rows = await readJsonSafe(res);
+      profile = Array.isArray(rows) ? rows[0] : null;
+    }
+
+    if (!profile) {
+      return json({ error: "Perfil não encontrado na tabela profiles para este usuário.", user: { id: user.id, email: user.email } }, 404);
+    }
+
+    return json({ ok: true, user: { id: user.id, email: user.email }, profile });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao buscar perfil.", stack: String(err?.stack || "").slice(0, 800) }, 500);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    if (url.pathname === "/api/me") return handleMe(request, env);
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
     if (url.pathname === "/api/update-portaria") return handleUpdatePortaria(request, env);

@@ -158,11 +158,48 @@ async function loginPortaria() {
 }
 
 async function carregarPerfil() {
-  const { data, error } = await supabaseClient.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
-  if (error || !data) { profile = null; msg($("loginMsg"), "Perfil não encontrado. Verifique se o usuário foi cadastrado na tabela profiles.", "error"); return; }
-  if (data.ativo === false) { profile = null; msg($("loginMsg"), "Usuário inativo. Contate a administração.", "error"); await supabaseClient.auth.signOut(); return; }
-  profile = data;
+  const { data: sessionData } = await supabaseClient.auth.getSession();
+  const token = sessionData?.session?.access_token;
+
+  if (token) {
+    try {
+      const res = await fetch("/api/me", {
+        method: "GET",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result?.profile) {
+        profile = result.profile;
+      } else {
+        profile = null;
+        msg($("loginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
+        msg($("adminLoginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
+        msg($("portariaLoginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
+        return;
+      }
+    } catch (err) {
+      profile = null;
+      msg($("loginMsg"), "Erro ao consultar perfil: " + (err?.message || err), "error");
+      msg($("adminLoginMsg"), "Erro ao consultar perfil: " + (err?.message || err), "error");
+      msg($("portariaLoginMsg"), "Erro ao consultar perfil: " + (err?.message || err), "error");
+      return;
+    }
+  } else {
+    profile = null;
+    msg($("loginMsg"), "Sessão expirada. Faça login novamente.", "error");
+    return;
+  }
+
+  if (profile.ativo === false) {
+    profile = null;
+    msg($("loginMsg"), "Usuário inativo. Contate a administração.", "error");
+    msg($("adminLoginMsg"), "Usuário inativo. Contate a administração.", "error");
+    msg($("portariaLoginMsg"), "Usuário inativo. Contate a administração.", "error");
+    await supabaseClient.auth.signOut();
+    return;
+  }
 }
+
 
 async function abrirDashboard() {
   hide($("loginScreen")); show($("dashboardScreen"));
