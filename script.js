@@ -227,19 +227,42 @@ async function abrirDashboard() {
 
 async function logout(){ if(supabaseClient) await supabaseClient.auth.signOut(); window.location.reload(); }
 
+async function apiGet(path){
+  const {data:sessionData}=await supabaseClient.auth.getSession();
+  const token=sessionData?.session?.access_token;
+  const res=await fetch(path,{headers:{"Authorization":`Bearer ${token}`}});
+  const result=await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(result.error || `Erro na API ${path}. Status ${res.status}`);
+  return result.data || [];
+}
+
+
 async function carregarMoradores() {
-  const { data, error } = await supabaseClient.from("profiles").select("*").eq("role","morador").order("nome", { ascending: true });
-  moradores = error ? [] : (data || []);
+  try{
+    moradores = await apiGet("/api/list-moradores");
+  }catch(error){
+    console.error("Erro ao carregar moradores pela API:", error);
+    moradores = [];
+    msg($("adminMsg"), "Não foi possível carregar os moradores: " + error.message, "error");
+  }
   popularMoradores(); renderMoradoresTable(); renderResumo(); renderCondominiosTable(); renderPortariaMoradores();
 }
 async function carregarMoradoresPortaria(){
-  const { data, error } = await supabaseClient.from("profiles").select("*").eq("role","morador").eq("condominio_id", profile.condominio_id).order("nome", { ascending: true });
-  moradores = error ? [] : (data || []);
+  try{
+    moradores = await apiGet("/api/list-moradores");
+  }catch(error){
+    console.error("Erro ao carregar moradores da portaria pela API:", error);
+    moradores = [];
+  }
   renderPortariaMoradores();
 }
 async function carregarPortarias(){
-  const { data, error } = await supabaseClient.from("portaria_logins").select("*").order("nome", { ascending: true });
-  portarias = error ? [] : (data || []);
+  try{
+    portarias = await apiGet("/api/list-portarias");
+  }catch(error){
+    console.error("Erro ao carregar portarias pela API:", error);
+    portarias = [];
+  }
   renderPortariaTable();
 }
 function popularMoradores(){
@@ -262,10 +285,13 @@ function popularMoradoresSenha(){
 function popularLancamentosRemocao(){ const el=$("removerLancamento"); if(!el) return; el.innerHTML = `<option value="">Selecione o lançamento</option>` + lancamentos.map(l => `<option value="${l.id}">${escapeHtml(`${formatDate(l.data)} - ${money(l.valor)} - ${l.categoria || l.descricao || l.tipo}`)}</option>`).join(""); }
 
 async function carregarLancamentos(){
-  let query = supabaseClient.from("lancamentos").select("*, condominios(nome)").order("data", { ascending:false });
-  if(profile?.role !== "admin") query = query.eq("condominio_id", profile.condominio_id);
-  const { data, error } = await query;
-  lancamentos = error ? [] : (data || []);
+  try{
+    lancamentos = await apiGet("/api/list-lancamentos");
+  }catch(error){
+    console.error("Erro ao carregar lançamentos pela API:", error);
+    lancamentos = [];
+    msg($("adminMsg"), "Não foi possível carregar os lançamentos: " + error.message, "error");
+  }
   renderResumo(); renderLancamentos(); popularLancamentosRemocao();
 }
 

@@ -506,6 +506,106 @@ async function handleDeletePortaria(request, env) {
   } catch (err) { return json({ error: err?.message || "Erro interno ao remover portaria." }, 500); }
 }
 
+
+async function assertAuthenticatedProfile(env, request) {
+  const user = await getLoggedUser(env, request);
+  if (!user?.id) {
+    return { ok: false, response: json({ error: "Sessão inválida ou expirada. Faça login novamente." }, 401) };
+  }
+
+  let res = await supabaseFetch(env, `/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=*&limit=1`, { method: "GET" });
+  let rows = await readJsonSafe(res);
+  let prof = Array.isArray(rows) ? rows[0] : null;
+
+  if (!prof && user.email) {
+    res = await supabaseFetch(env, `/rest/v1/profiles?email=eq.${encodeURIComponent(String(user.email).toLowerCase())}&select=*&limit=1`, { method: "GET" });
+    rows = await readJsonSafe(res);
+    prof = Array.isArray(rows) ? rows[0] : null;
+  }
+
+  if (!prof || prof.ativo === false) {
+    return { ok: false, response: json({ error: "Perfil não encontrado ou inativo para este login.", user: { id: user.id, email: user.email } }, 403) };
+  }
+
+  return { ok: true, user, profile: prof };
+}
+
+async function handleListMoradores(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "GET") return json({ error: "Método não permitido. Use GET." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+
+    const auth = await assertAuthenticatedProfile(env, request);
+    if (!auth.ok) return auth.response;
+
+    const url = new URL(request.url);
+    const role = auth.profile.role;
+    let path = `/rest/v1/profiles?role=eq.morador&select=*&order=nome.asc`;
+
+    if (role === "admin") {
+      const cond = String(url.searchParams.get("condominio_id") || "").trim();
+      if (cond) path = `/rest/v1/profiles?role=eq.morador&condominio_id=eq.${encodeURIComponent(cond)}&select=*&order=nome.asc`;
+    } else if (role === "portaria" || role === "morador") {
+      if (!auth.profile.condominio_id) return json({ error: "Este usuário não está vinculado a um condomínio." }, 400);
+      path = `/rest/v1/profiles?role=eq.morador&condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*&order=nome.asc`;
+    } else {
+      return json({ error: "Tipo de perfil sem permissão para listar moradores." }, 403);
+    }
+
+    const res = await supabaseFetch(env, path, { method: "GET" });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao listar moradores.", detalhe: data }, res.status);
+    return json({ ok: true, data: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao listar moradores." }, 500);
+  }
+}
+
+async function handleListLancamentos(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "GET") return json({ error: "Método não permitido. Use GET." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+
+    const auth = await assertAuthenticatedProfile(env, request);
+    if (!auth.ok) return auth.response;
+
+    let path = `/rest/v1/lancamentos?select=*,condominios(nome)&order=data.desc`;
+    if (auth.profile.role !== "admin") {
+      if (!auth.profile.condominio_id) return json({ error: "Este usuário não está vinculado a um condomínio." }, 400);
+      path = `/rest/v1/lancamentos?condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*,condominios(nome)&order=data.desc`;
+    }
+
+    const res = await supabaseFetch(env, path, { method: "GET" });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao listar lançamentos.", detalhe: data }, res.status);
+    return json({ ok: true, data: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao listar lançamentos." }, 500);
+  }
+}
+
+async function handleListPortarias(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "GET") return json({ error: "Método não permitido. Use GET." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const admin = await assertAdmin(env, request);
+    if (!admin.ok) return admin.response;
+
+    const res = await supabaseFetch(env, `/rest/v1/portaria_logins?select=*&order=nome.asc`, { method: "GET" });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao listar portarias.", detalhe: data }, res.status);
+    return json({ ok: true, data: Array.isArray(data) ? data : [] });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao listar portarias." }, 500);
+  }
+}
+
 async function handleMe(request, env) {
   try {
     if (request.method === "OPTIONS") return json({ ok: true });
@@ -552,6 +652,9 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/me") return handleMe(request, env);
+    if (url.pathname === "/api/list-moradores") return handleListMoradores(request, env);
+    if (url.pathname === "/api/list-lancamentos") return handleListLancamentos(request, env);
+    if (url.pathname === "/api/list-portarias") return handleListPortarias(request, env);
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
     if (url.pathname === "/api/update-portaria") return handleUpdatePortaria(request, env);
@@ -564,7 +667,7 @@ export default {
         ok: missing.length === 0,
         missing,
         mode: "worker-assets",
-        routes: ["/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password"],
+        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password"],
         database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }
