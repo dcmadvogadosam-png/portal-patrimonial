@@ -707,12 +707,12 @@ async function handleListMensagens(request, env) {
     const url = new URL(request.url);
     const role = String(auth.profile.role || "").toLowerCase();
     let condominioId = String(url.searchParams.get("condominio_id") || "").trim();
-    let path = "/rest/v1/mensagens_moradores?select=*&order=created_at.asc";
+    let path = "/rest/v1/mensagens_moradores?deletado_admin=eq.false&select=*&order=created_at.asc";
 
     if (role === "admin") {
-      if (condominioId) path = `/rest/v1/mensagens_moradores?condominio_id=eq.${encodeURIComponent(condominioId)}&select=*&order=created_at.asc`;
+      if (condominioId) path = `/rest/v1/mensagens_moradores?condominio_id=eq.${encodeURIComponent(condominioId)}&deletado_admin=eq.false&select=*&order=created_at.asc`;
     } else if (role === "morador") {
-      path = `/rest/v1/mensagens_moradores?morador_id=eq.${encodeURIComponent(auth.profile.id)}&select=*&order=created_at.asc`;
+      path = `/rest/v1/mensagens_moradores?morador_id=eq.${encodeURIComponent(auth.profile.id)}&deletado_morador=eq.false&select=*&order=created_at.asc`;
     } else {
       return json({ error: "Acesso permitido apenas para administrador ou morador." }, 403);
     }
@@ -742,6 +742,7 @@ async function handleSendMensagem(request, env) {
     if (!assunto || !descricao) return json({ error: "Preencha assunto e descrição." }, 400);
     if (!auth.profile.condominio_id) return json({ error: "Seu cadastro não está vinculado a um condomínio." }, 400);
 
+    const threadId = crypto.randomUUID();
     const payload = {
       condominio_id: auth.profile.condominio_id,
       morador_id: auth.profile.id,
@@ -751,7 +752,8 @@ async function handleSendMensagem(request, env) {
       assunto,
       descricao,
       respondida: false,
-      created_by: auth.user.id
+      created_by: auth.user.id,
+      thread_id: threadId
     };
     const res = await supabaseFetch(env, "/rest/v1/mensagens_moradores", { method: "POST", body: JSON.stringify(payload) });
     const data = await readJsonSafe(res);
@@ -774,6 +776,7 @@ async function handleReplyMensagem(request, env) {
     const body = await request.json().catch(() => null);
     const moradorId = String(body?.morador_id || "").trim();
     const descricao = String(body?.descricao || "").trim();
+    const threadId = String(body?.thread_id || "").trim() || null;
     if (!moradorId || !descricao) return json({ error: "Selecione o morador e digite a resposta." }, 400);
 
     const profRes = await supabaseFetch(env, `/rest/v1/profiles?id=eq.${encodeURIComponent(moradorId)}&select=id,nome,email,unidade,condominio_id,role&limit=1`, { method: "GET" });
@@ -790,7 +793,8 @@ async function handleReplyMensagem(request, env) {
       assunto: "Resposta da administração",
       descricao,
       respondida: true,
-      created_by: admin.user.id
+      created_by: admin.user.id,
+      thread_id: threadId
     };
     const res = await supabaseFetch(env, "/rest/v1/mensagens_moradores", { method: "POST", body: JSON.stringify(payload) });
     const data = await readJsonSafe(res);
@@ -799,6 +803,34 @@ async function handleReplyMensagem(request, env) {
     return json({ ok: true, data: Array.isArray(data) ? data[0] : data });
   } catch (err) {
     return json({ error: err?.message || "Erro interno ao responder mensagem." }, 500);
+  }
+}
+
+async function handleDeleteMensagem(request, env) {
+  try {
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST") return json({ error: "Método não permitido. Use POST." }, 405);
+    const missing = requiredEnv(env);
+    if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const auth = await assertAuthenticatedProfile(env, request);
+    if (!auth.ok) return auth.response;
+    const role = String(auth.profile.role || "").toLowerCase();
+    if (role !== "morador" && role !== "admin") return json({ error: "Acesso permitido apenas para administrador ou morador." }, 403);
+    const body = await request.json().catch(() => null);
+    const id = String(body?.id || "").trim();
+    const threadId = String(body?.thread_id || "").trim();
+    if (!id && !threadId) return json({ error: "Informe a mensagem ou conversa para excluir." }, 400);
+    const campo = role === "admin" ? "deletado_admin" : "deletado_morador";
+    let filtro = "";
+    if (id) filtro = `id=eq.${encodeURIComponent(id)}`;
+    if (threadId) filtro = `thread_id=eq.${encodeURIComponent(threadId)}`;
+    if (role === "morador") filtro += `&morador_id=eq.${encodeURIComponent(auth.profile.id)}`;
+    const res = await supabaseFetch(env, `/rest/v1/mensagens_moradores?${filtro}`, { method: "PATCH", body: JSON.stringify({ [campo]: true }) });
+    const data = await readJsonSafe(res);
+    if (!res.ok) return json({ error: data?.message || data?.error || data?.raw || "Erro ao excluir mensagem.", detalhe: data }, res.status);
+    return json({ ok: true, data });
+  } catch (err) {
+    return json({ error: err?.message || "Erro interno ao excluir mensagem." }, 500);
   }
 }
 
@@ -855,6 +887,7 @@ export default {
     if (url.pathname === "/api/list-mensagens") return handleListMensagens(request, env);
     if (url.pathname === "/api/send-mensagem") return handleSendMensagem(request, env);
     if (url.pathname === "/api/reply-mensagem") return handleReplyMensagem(request, env);
+    if (url.pathname === "/api/delete-mensagem") return handleDeleteMensagem(request, env);
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
     if (url.pathname === "/api/update-portaria") return handleUpdatePortaria(request, env);
@@ -868,7 +901,7 @@ export default {
         missing,
         mode: "worker-assets",
         version: "corrigido-rotas-listagem-2026-05-22",
-        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/save-lancamento", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password", "/api/list-mensagens", "/api/send-mensagem", "/api/reply-mensagem"],
+        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/save-lancamento", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password", "/api/list-mensagens", "/api/send-mensagem", "/api/reply-mensagem", "/api/delete-mensagem"],
         database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "mensagens_moradores", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }

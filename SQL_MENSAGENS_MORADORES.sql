@@ -14,12 +14,20 @@ create table if not exists public.mensagens_moradores (
   assunto text not null,
   descricao text not null,
   respondida boolean not null default false,
-  created_by uuid
+  created_by uuid,
+  thread_id uuid,
+  deletado_morador boolean not null default false,
+  deletado_admin boolean not null default false
 );
 
 create index if not exists idx_mensagens_moradores_condominio on public.mensagens_moradores(condominio_id);
 create index if not exists idx_mensagens_moradores_morador on public.mensagens_moradores(morador_id);
 create index if not exists idx_mensagens_moradores_created_at on public.mensagens_moradores(created_at);
+create index if not exists idx_mensagens_moradores_thread on public.mensagens_moradores(thread_id);
+
+alter table public.mensagens_moradores add column if not exists thread_id uuid;
+alter table public.mensagens_moradores add column if not exists deletado_morador boolean not null default false;
+alter table public.mensagens_moradores add column if not exists deletado_admin boolean not null default false;
 
 alter table public.mensagens_moradores enable row level security;
 

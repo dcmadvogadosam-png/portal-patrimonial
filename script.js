@@ -482,17 +482,70 @@ async function carregarMensagensMorador(){
   }
 }
 
+function getMensagemThreadId(m){ return String(m.thread_id || m.morador_id || "conversa-geral"); }
+function agruparMensagensPorConversa(lista){
+  const mapa = new Map();
+  [...lista].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).forEach(m => {
+    const id = getMensagemThreadId(m);
+    const atual = mapa.get(id) || { id, assunto: m.assunto || "Conversa com a administração", mensagens: [], ultima: m.created_at || "" };
+    if(m.remetente_tipo === "morador" && (!atual.assunto || atual.assunto === "Resposta da administração")) atual.assunto = m.assunto || atual.assunto;
+    atual.mensagens.push(m);
+    atual.ultima = m.created_at || atual.ultima;
+    mapa.set(id, atual);
+  });
+  return [...mapa.values()].sort((a,b)=>String(b.ultima).localeCompare(String(a.ultima)));
+}
+
 function renderMensagensMorador(){
   const box = $("residentMessagesList"); if(!box) return;
-  if(!mensagens.length){ box.innerHTML = `<p>Você ainda não possui mensagens.</p>`; return; }
-  box.innerHTML = mensagens.map(m => `
+  const view = $("residentConversationView");
+  if(view){ hide(view); view.innerHTML = ""; }
+  if(!mensagens.length){ box.innerHTML = `<p>Você ainda não possui conversas.</p>`; return; }
+  const conversas = agruparMensagensPorConversa(mensagens);
+  box.innerHTML = conversas.map(c => {
+    const ultima = c.mensagens[c.mensagens.length-1];
+    const pendentes = c.mensagens.filter(m => m.remetente_tipo === "admin").length;
+    return `<button class="resident-thread-card" type="button" onclick="abrirConversaMoradorPainel('${escapeHtml(c.id)}')">
+      <strong>${escapeHtml(c.assunto || "Conversa com a administração")}</strong>
+      <span>${c.mensagens.length} mensagem(ns) na conversa · última em ${formatDate(String(ultima?.created_at||"").slice(0,10))}</span>
+      <small>${pendentes ? "Resposta da administração disponível" : "Aguardando resposta"}</small>
+    </button>`;
+  }).join("");
+}
+
+window.abrirConversaMoradorPainel = function(threadId){
+  const view = $("residentConversationView"); if(!view) return;
+  const msgs = mensagens.filter(m => getMensagemThreadId(m) === String(threadId)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+  if(!msgs.length) return;
+  const assunto = msgs.find(m => m.remetente_tipo === "morador")?.assunto || msgs[0]?.assunto || "Conversa";
+  view.innerHTML = `<div class="conversation-view-head">
+    <div><h3>${escapeHtml(assunto)}</h3><p class="message">Histórico completo da conversa com a administração.</p></div>
+    <div class="conversation-actions"><button class="btn-small btn-secondary" type="button" onclick="fecharConversaMoradorPainel()">Voltar</button><button class="btn-small btn-danger-soft" type="button" onclick="excluirConversaMorador('${escapeHtml(threadId)}')">Excluir conversa</button></div>
+  </div>
+  <div class="resident-message-thread">${msgs.map(m => `
     <article class="message-bubble ${m.remetente_tipo === "admin" ? "admin" : "resident"}">
       <div><strong>${m.remetente_tipo === "admin" ? "Administração" : "Você"}</strong><small>${formatDate(String(m.created_at||"").slice(0,10))}</small></div>
       <h4>${escapeHtml(m.assunto || "Mensagem")}</h4>
       <p>${escapeHtml(m.descricao || "")}</p>
-    </article>
-  `).join("");
-}
+      <footer class="message-bubble-footer"><button class="delete-message-btn" type="button" onclick="excluirMensagemMorador('${escapeHtml(m.id)}')">Excluir mensagem</button></footer>
+    </article>`).join("")}</div>`;
+  show(view);
+  view.scrollIntoView({ behavior:"smooth", block:"start" });
+};
+
+window.fecharConversaMoradorPainel = function(){ const view = $("residentConversationView"); if(view){ hide(view); view.innerHTML=""; } };
+
+window.excluirMensagemMorador = async function(id){
+  if(!id || !confirm("Excluir esta mensagem somente do seu painel?")) return;
+  try{ await apiPost("/api/delete-mensagem", { id }); await carregarMensagensMorador(); }
+  catch(error){ alert(error.message || "Erro ao excluir mensagem."); }
+};
+
+window.excluirConversaMorador = async function(threadId){
+  if(!threadId || !confirm("Excluir esta conversa somente do seu painel?")) return;
+  try{ await apiPost("/api/delete-mensagem", { thread_id: threadId }); await carregarMensagensMorador(); }
+  catch(error){ alert(error.message || "Erro ao excluir conversa."); }
+};
 
 async function enviarMensagemSindico(){
   const assunto = ($("sindicoAssunto")?.value || "").trim();
@@ -568,7 +621,7 @@ async function responderMensagemMorador(){
   if(!conversaMoradorSelecionado) return msg($("mensagensAdminMsg"), "Selecione um morador para responder.", "error");
   if(!descricao) return msg($("mensagensAdminMsg"), "Digite a resposta antes de enviar.", "error");
   try{
-    await apiPost("/api/reply-mensagem", { morador_id: conversaMoradorSelecionado, descricao });
+    await apiPost("/api/reply-mensagem", { morador_id: conversaMoradorSelecionado, thread_id: (mensagens.find(m => String(m.morador_id) === String(conversaMoradorSelecionado))?.thread_id || null), descricao });
     $("respostaAdminMensagem").value = "";
     await carregarMensagensAdmin();
     abrirConversaMorador(conversaMoradorSelecionado);
