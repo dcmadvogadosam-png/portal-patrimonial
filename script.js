@@ -14,6 +14,8 @@ let lancamentos = [];
 let moradores = [];
 let portarias = [];
 let whatsappMoradorAtual = null;
+let mensagens = [];
+let conversaMoradorSelecionado = null;
 
 function msg(el, text, type = "") { if (el) { el.textContent = text || ""; el.className = `message ${type}`; } }
 function show(el) { el?.classList.remove("hidden"); }
@@ -67,6 +69,13 @@ function bindBasicEvents() {
   $("closeWhatsapp")?.addEventListener("click", () => hide($("whatsappModal")));
   $("whatsappModal")?.addEventListener("click", (e) => { if (e.target?.id === "whatsappModal") hide($("whatsappModal")); });
   $("enviarWhatsappBtn")?.addEventListener("click", enviarWhatsappMorador);
+  $("abrirFaleSindicoBtn")?.addEventListener("click", abrirFaleSindico);
+  $("closeFaleSindico")?.addEventListener("click", () => hide($("faleSindicoModal")));
+  $("faleSindicoModal")?.addEventListener("click", (e) => { if (e.target?.id === "faleSindicoModal") hide($("faleSindicoModal")); });
+  $("enviarSindicoBtn")?.addEventListener("click", enviarMensagemSindico);
+  $("carregarMensagensBtn")?.addEventListener("click", carregarMensagensAdmin);
+  $("mensagensCondominio")?.addEventListener("change", carregarMensagensAdmin);
+  $("enviarRespostaMensagemBtn")?.addEventListener("click", responderMensagemMorador);
   $("closeDetail")?.addEventListener("click", () => hide($("detailModal")));
   $("detailModal")?.addEventListener("click", (e) => { if (e.target?.id === "detailModal") hide($("detailModal")); });
   $("formCondominio")?.addEventListener("submit", criarCondominio);
@@ -118,7 +127,7 @@ async function carregarCondominios() {
 
 function popularSelects() {
   const options = `<option value="">Selecione o condomínio</option>` + condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("");
-  ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
+  ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio","mensagensCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
 }
 
 async function loginMorador() {
@@ -221,7 +230,8 @@ async function abrirDashboard() {
   $("condominioTitulo").textContent = condominio?.nome || "Condomínio";
   if (isPortaria) { await carregarMoradoresPortaria(); renderResumo(); return; }
   await carregarLancamentos();
-  if (isAdmin) { await carregarMoradores(); await carregarPortarias(); }
+  if (isAdmin) { await carregarMoradores(); await carregarPortarias(); await carregarMensagensAdmin(false); }
+  if (!isAdmin && !isPortaria) { show($("residentCommsSection")); await carregarMensagensMorador(); }
   renderResumo(); if(isAdmin) setAdminTab("condominios");
 }
 
@@ -234,6 +244,15 @@ async function apiGet(path){
   const result=await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(result.error || `Erro na API ${path}. Status ${res.status}`);
   return result.data || [];
+}
+
+async function apiPost(path, body){
+  const {data:sessionData}=await supabaseClient.auth.getSession();
+  const token=sessionData?.session?.access_token;
+  const res=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${token}`},body:JSON.stringify(body || {})});
+  const result=await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(result.error || `Erro na API ${path}. Status ${res.status}`);
+  return result.data || result;
 }
 
 
@@ -442,6 +461,122 @@ window.abrirWhatsappMorador=function(id){ const m=moradores.find(x=>x.id===id); 
 function enviarWhatsappMorador(){ if(!whatsappMoradorAtual?.celular)return; const assunto=($("whatsappAssunto")?.value||"").trim(); const descricao=($("whatsappDescricao")?.value||"").trim(); if(!assunto||!descricao)return alert("Digite o assunto e a descrição da mensagem."); const numero=String(whatsappMoradorAtual.celular).replace(/\D/g,""); const finalNumero=numero.startsWith("55")?numero:`55${numero}`; const texto=`Assunto: ${assunto}
 
 ${descricao}`; window.open(`https://wa.me/${finalNumero}?text=${encodeURIComponent(texto)}`,"_blank"); hide($("whatsappModal")); }
+
+
+function abrirFaleSindico(){
+  $("sindicoAssunto").value = "";
+  $("sindicoDescricao").value = "";
+  msg($("sindicoMsg"), "");
+  show($("faleSindicoModal"));
+}
+
+async function carregarMensagensMorador(){
+  const box = $("residentMessagesList");
+  if(!box || profile?.role === "admin" || profile?.role === "portaria") return;
+  try{
+    mensagens = await apiGet("/api/list-mensagens");
+    renderMensagensMorador();
+  }catch(error){
+    console.error("Erro ao carregar mensagens do morador:", error);
+    box.innerHTML = `<p class="message error">${escapeHtml(error.message || "Erro ao carregar mensagens.")}</p>`;
+  }
+}
+
+function renderMensagensMorador(){
+  const box = $("residentMessagesList"); if(!box) return;
+  if(!mensagens.length){ box.innerHTML = `<p>Você ainda não possui mensagens.</p>`; return; }
+  box.innerHTML = mensagens.map(m => `
+    <article class="message-bubble ${m.remetente_tipo === "admin" ? "admin" : "resident"}">
+      <div><strong>${m.remetente_tipo === "admin" ? "Administração" : "Você"}</strong><small>${formatDate(String(m.created_at||"").slice(0,10))}</small></div>
+      <h4>${escapeHtml(m.assunto || "Mensagem")}</h4>
+      <p>${escapeHtml(m.descricao || "")}</p>
+    </article>
+  `).join("");
+}
+
+async function enviarMensagemSindico(){
+  const assunto = ($("sindicoAssunto")?.value || "").trim();
+  const descricao = ($("sindicoDescricao")?.value || "").trim();
+  msg($("sindicoMsg"), "");
+  if(!assunto || !descricao) return msg($("sindicoMsg"), "Preencha o assunto e a descrição.", "error");
+  try{
+    await apiPost("/api/send-mensagem", { assunto, descricao });
+    msg($("sindicoMsg"), "Mensagem enviada com sucesso.", "ok");
+    $("sindicoAssunto").value = "";
+    $("sindicoDescricao").value = "";
+    await carregarMensagensMorador();
+    setTimeout(() => hide($("faleSindicoModal")), 700);
+  }catch(error){
+    msg($("sindicoMsg"), error.message || "Erro ao enviar mensagem.", "error");
+  }
+}
+
+async function carregarMensagensAdmin(mostrarErro = true){
+  if(profile?.role !== "admin") return;
+  const cond = $("mensagensCondominio")?.value || "";
+  const lista = $("mensagensMoradoresLista");
+  const thread = $("mensagemThreadLista");
+  conversaMoradorSelecionado = null;
+  if($("responderMensagemBox")) hide($("responderMensagemBox"));
+  if(!cond){
+    if(lista) lista.innerHTML = `<p>Selecione um condomínio para visualizar.</p>`;
+    if(thread) thread.innerHTML = `<p>Clique no nome do morador para abrir a conversa.</p>`;
+    return;
+  }
+  try{
+    mensagens = await apiGet(`/api/list-mensagens?condominio_id=${encodeURIComponent(cond)}`);
+    renderMensagensAdminLista();
+    if(thread) thread.innerHTML = `<p>Clique no nome do morador para abrir a conversa.</p>`;
+    msg($("mensagensAdminMsg"), mensagens.length ? "" : "Nenhuma mensagem encontrada para este condomínio.");
+  }catch(error){
+    if(mostrarErro) msg($("mensagensAdminMsg"), error.message || "Erro ao carregar mensagens.", "error");
+  }
+}
+
+function renderMensagensAdminLista(){
+  const lista = $("mensagensMoradoresLista"); if(!lista) return;
+  const porMorador = new Map();
+  mensagens.forEach(m => {
+    const id = m.morador_id || "sem-id";
+    const atual = porMorador.get(id) || { morador_id:id, nome:m.morador_nome || "Morador", unidade:m.morador_unidade || "", total:0, ultima:"" };
+    atual.total += 1;
+    atual.ultima = m.created_at || atual.ultima;
+    porMorador.set(id, atual);
+  });
+  const rows = [...porMorador.values()].sort((a,b)=>String(b.ultima).localeCompare(String(a.ultima)));
+  lista.innerHTML = rows.map(r => `<button class="resident-message-person" type="button" onclick="abrirConversaMorador('${escapeHtml(r.morador_id)}')"><strong>${escapeHtml(r.nome)}</strong><span>${r.unidade ? `Unidade ${escapeHtml(r.unidade)} · ` : ""}${r.total} mensagem(ns)</span></button>`).join("") || `<p>Nenhum morador enviou mensagem neste condomínio.</p>`;
+}
+
+window.abrirConversaMorador = function(moradorId){
+  conversaMoradorSelecionado = moradorId;
+  const thread = $("mensagemThreadLista"); if(!thread) return;
+  const msgs = mensagens.filter(m => String(m.morador_id) === String(moradorId)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+  const morador = msgs[0];
+  if($("mensagemThreadTitulo")) $("mensagemThreadTitulo").textContent = morador ? `Conversa com ${morador.morador_nome || "morador"}` : "Conversa";
+  thread.innerHTML = msgs.map(m => `
+    <article class="message-bubble ${m.remetente_tipo === "admin" ? "admin" : "resident"}">
+      <div><strong>${m.remetente_tipo === "admin" ? "Administração" : escapeHtml(m.morador_nome || "Morador")}</strong><small>${formatDate(String(m.created_at||"").slice(0,10))}</small></div>
+      <h4>${escapeHtml(m.assunto || "Mensagem")}</h4>
+      <p>${escapeHtml(m.descricao || "")}</p>
+    </article>
+  `).join("");
+  if($("responderMensagemBox")) show($("responderMensagemBox"));
+};
+
+async function responderMensagemMorador(){
+  const descricao = ($("respostaAdminMensagem")?.value || "").trim();
+  if(!conversaMoradorSelecionado) return msg($("mensagensAdminMsg"), "Selecione um morador para responder.", "error");
+  if(!descricao) return msg($("mensagensAdminMsg"), "Digite a resposta antes de enviar.", "error");
+  try{
+    await apiPost("/api/reply-mensagem", { morador_id: conversaMoradorSelecionado, descricao });
+    $("respostaAdminMensagem").value = "";
+    await carregarMensagensAdmin();
+    abrirConversaMorador(conversaMoradorSelecionado);
+    msg($("mensagensAdminMsg"), "Resposta enviada ao morador.", "ok");
+  }catch(error){
+    msg($("mensagensAdminMsg"), error.message || "Erro ao responder mensagem.", "error");
+  }
+}
 
 async function uploadFile(file, folder){ if(!file) return null; const ext=file.name.split('.').pop(); const path=`${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`; const {error}=await supabaseClient.storage.from("documentos").upload(path,file,{upsert:false}); if(error){console.warn(error); return null;} const {data}=supabaseClient.storage.from("documentos").getPublicUrl(path); return data?.publicUrl || null; }
 
