@@ -318,6 +318,7 @@
                 <input id="catNome" placeholder="Categoria. Ex.: Engenharia" required />
                 <input id="catSetor" placeholder="Setor responsável. Ex.: Engenharia" required />
                 <input id="catResponsavel" placeholder="Responsável padrão (opcional)" />
+                <select id="catRole"></select>
                 <input id="catPrazo" type="number" min="1" placeholder="Prazo padrão em dias" required />
                 <button class="btn btn-primary" type="submit">Salvar categoria</button>
                 <div id="categoriasLista" class="category-list"></div>
@@ -357,6 +358,15 @@
             <div><h2>💬 Comunicação com o síndico</h2><p>Envie solicitações e acompanhe as respostas da administração.</p></div>
             <button id="abrirFaleSindicoBtn" class="btn btn-primary" type="button">Fale com seu síndico</button>
           </div>
+          <form id="formOcorrenciaMorador" class="action-card accent-blue resident-occurrence-form">
+            <h3>📌 Abrir ocorrência</h3>
+            <p>Registre uma demanda formal para acompanhamento da administração.</p>
+            <select id="residentOcCategoria" required></select>
+            <select id="residentOcPrioridade"><option value="Normal">Prioridade normal</option><option value="Baixa">Baixa</option><option value="Alta">Alta</option><option value="Urgente">Urgente</option></select>
+            <textarea id="residentOcDescricao" placeholder="Descreva a ocorrência, local, detalhes e urgência" required></textarea>
+            <button class="btn btn-primary" type="submit">Registrar ocorrência</button>
+            <p id="residentOcMsg" class="message"></p>
+          </form>
           <div id="residentMessagesList" class="resident-conversation-list"><p>Nenhuma conversa carregada.</p></div>
           <div id="residentConversationView" class="resident-conversation-view hidden"></div>
         </section>

@@ -19,6 +19,11 @@ let conversaMoradorSelecionado = null;
 let ocorrencias = [];
 let ocorrenciaCategorias = [];
 let ocorrenciaSelecionada = null;
+const INTERNAL_ROLES = ["admin","administrativo","engenharia","financeiro","juridico","jurídico","manutencao","manutenção","seguranca","segurança","limpeza","portaria","obras","prestadores"];
+const SECTOR_ROLES = INTERNAL_ROLES.filter(r => r !== "admin" && r !== "portaria");
+function normalizeRole(v=""){ return String(v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); }
+function isInternalRole(){ return INTERNAL_ROLES.map(normalizeRole).includes(normalizeRole(profile?.role)); }
+function roleLabel(role){ const r=normalizeRole(role); return r==="admin"?"Administrador":r==="portaria"?"Portaria":r==="morador"?"Morador":String(role||"Setor interno").replace(/^./,c=>c.toUpperCase()); }
 
 function msg(el, text, type = "") { if (el) { el.textContent = text || ""; el.className = `message ${type}`; } }
 function show(el) { el?.classList.remove("hidden"); }
@@ -94,6 +99,7 @@ function bindBasicEvents() {
   $("moradorFotoPlaca")?.addEventListener("change", (e) => { $("moradorFotoPlacaNome").textContent = e.target.files?.[0]?.name || "Nenhuma imagem selecionada"; });
   $("formOcorrencia")?.addEventListener("submit", criarOcorrencia);
   $("formOcCategoria")?.addEventListener("submit", salvarOcorrenciaCategoria);
+  $("formOcorrenciaMorador")?.addEventListener("submit", criarOcorrenciaMorador);
   $("atualizarOcorrenciasBtn")?.addEventListener("click", carregarOcorrencias);
   $("ocFiltroCond")?.addEventListener("change", renderOcorrencias);
   $("ocFiltroStatus")?.addEventListener("change", renderOcorrencias);
@@ -135,12 +141,18 @@ async function carregarCondominios() {
   if (!supabaseClient) return;
   const { data, error } = await supabaseClient.from("condominios").select("*").order("nome", { ascending: true });
   condominios = error ? [] : (data || []).map(c => ({...c, nome: c.nome || c.name || "Condomínio sem nome", endereco: c.endereco || c.address || ""}));
-  popularSelects(); renderCondominiosTable(); renderResumo();
+  popularSelects(); popularSetorRoles(); renderCondominiosTable(); renderResumo();
 }
 
 function popularSelects() {
   const options = `<option value="">Selecione o condomínio</option>` + condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("");
   ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio","mensagensCondominio","ocCond","ocFiltroCond"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
+}
+
+
+function popularSetorRoles(){
+  const options = `<option value="">Selecione o perfil responsável</option>` + SECTOR_ROLES.map(r => `<option value="${escapeHtml(normalizeRole(r))}">${escapeHtml(roleLabel(r))}</option>`).join("");
+  ["catRole"].forEach(id => { const el=$(id); if(el) el.innerHTML = options; });
 }
 
 async function loginMorador() {
@@ -162,7 +174,7 @@ async function loginAdmin() {
   const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) return msg($("adminLoginMsg"), "Login inválido: " + error.message, "error");
   currentUser = data.user; await carregarPerfil();
-  if (profile?.role !== "admin") { await supabaseClient.auth.signOut(); return msg($("adminLoginMsg"), "Este login não possui permissão administrativa.", "error"); }
+  if (!isInternalRole()) { await supabaseClient.auth.signOut(); return msg($("adminLoginMsg"), "Este login não possui permissão administrativa ou de setor interno.", "error"); }
   await abrirDashboard();
 }
 
@@ -225,27 +237,33 @@ async function carregarPerfil() {
 
 async function abrirDashboard() {
   hide($("loginScreen")); show($("dashboardScreen"));
-  const isAdmin = profile?.role === "admin";
-  const isPortaria = profile?.role === "portaria";
-  $("dashboardScreen").classList.toggle("is-admin", isAdmin);
-  $("dashboardScreen").classList.toggle("is-resident", !isAdmin && !isPortaria);
+  const roleNorm = normalizeRole(profile?.role);
+  const isAdmin = roleNorm === "admin";
+  const isPortaria = roleNorm === "portaria";
+  const isSetorInterno = isInternalRole() && !isAdmin && !isPortaria;
+  const isMorador = !isAdmin && !isPortaria && !isSetorInterno;
+  $("dashboardScreen").classList.toggle("is-admin", isAdmin || isSetorInterno);
+  $("dashboardScreen").classList.toggle("is-resident", isMorador);
   $("dashboardScreen").classList.toggle("is-portaria", isPortaria);
-  $("adminSidebar")?.classList.toggle("hidden", !isAdmin);
-  $("adminPanel")?.classList.toggle("hidden", !isAdmin);
-  $("recordsSection")?.classList.toggle("hidden", isPortaria);
+  $("dashboardScreen").classList.toggle("is-sector", isSetorInterno);
+  $("adminSidebar")?.classList.toggle("hidden", !(isAdmin || isSetorInterno));
+  $("adminPanel")?.classList.toggle("hidden", !(isAdmin || isSetorInterno));
+  $("recordsSection")?.classList.toggle("hidden", isPortaria || isSetorInterno);
   $("portariaPanel")?.classList.toggle("hidden", !isPortaria);
   $("sessionLabel").textContent = profile?.nome || currentUser.email;
-  $("sessionRole").textContent = isAdmin ? "Administrador" : (isPortaria ? "Portaria" : "Morador");
-  $("userRoleLabel").textContent = isAdmin ? "Administrador geral" : (isPortaria ? "Acesso da portaria" : `Morador | Unidade ${profile.unidade || "-"}`);
+  $("sessionRole").textContent = roleLabel(profile?.role);
+  $("userRoleLabel").textContent = isAdmin ? "Administrador geral" : (isSetorInterno ? `Setor interno | ${roleLabel(profile?.role)}` : (isPortaria ? "Acesso da portaria" : `Morador | Unidade ${profile.unidade || "-"}`));
+  document.querySelectorAll("[data-admin-tab]").forEach(btn => { if(isSetorInterno && btn.dataset.adminTab !== "ocorrencias") btn.classList.add("hidden"); else btn.classList.remove("hidden"); });
   if (!isAdmin && $("filterTipo")) { $("filterTipo").value = "despesa"; $("filterTipo").disabled = true; }
   if (isAdmin && $("filterTipo")) { $("filterTipo").disabled = false; }
-  const condominio = isAdmin ? { nome: "Todos os condomínios" } : condominios.find(c => c.id === profile.condominio_id);
+  const condominio = isAdmin || isSetorInterno ? { nome: isSetorInterno ? "Minhas ocorrências do setor" : "Todos os condomínios" } : condominios.find(c => c.id === profile.condominio_id);
   $("condominioTitulo").textContent = condominio?.nome || "Condomínio";
-  if (isPortaria) { await carregarMoradoresPortaria(); renderResumo(); return; }
-  await carregarLancamentos();
+  if (isPortaria) { await carregarMoradoresPortaria(); await carregarOcorrenciaCategorias(); renderResumo(); return; }
+  if(!isSetorInterno) await carregarLancamentos();
   if (isAdmin) { await carregarMoradores(); await carregarPortarias(); await carregarMensagensAdmin(false); await carregarOcorrenciaCategorias(); }
-  if (!isAdmin && !isPortaria) { show($("residentCommsSection")); await carregarMensagensMorador(); }
-  renderResumo(); if(isAdmin) setAdminTab("condominios");
+  if (isSetorInterno) { await carregarOcorrenciaCategorias(); await carregarOcorrencias(); }
+  if (isMorador) { show($("residentCommsSection")); await carregarMensagensMorador(); await carregarOcorrenciaCategorias(); }
+  renderResumo(); if(isAdmin) setAdminTab("condominios"); if(isSetorInterno) setAdminTab("ocorrencias");
 }
 
 async function logout(){ if(supabaseClient) await supabaseClient.auth.signOut(); window.location.reload(); }
@@ -685,17 +703,18 @@ async function carregarOcorrenciaCategorias(){
 function popularOcorrenciaCategorias(){
   const opts = `<option value="">Selecione a categoria</option>` + ocorrenciaCategorias.map(c=>`<option value="${escapeHtml(c.id || c.nome)}">${escapeHtml(c.nome)}${c.prazo_dias?` · ${c.prazo_dias} dias`:''}</option>`).join('');
   if($('ocCategoria')) $('ocCategoria').innerHTML = opts;
-  if($('categoriasLista')) $('categoriasLista').innerHTML = ocorrenciaCategorias.map(c=>`<span><strong>${escapeHtml(c.nome)}</strong><small>${escapeHtml(c.setor_responsavel||'-')} · SLA ${escapeHtml(c.prazo_dias||'-')} dia(s)</small></span>`).join('') || '<p>Nenhuma categoria cadastrada.</p>';
+  if($('residentOcCategoria')) $('residentOcCategoria').innerHTML = opts;
+  if($('categoriasLista')) $('categoriasLista').innerHTML = ocorrenciaCategorias.map(c=>`<span><strong>${escapeHtml(c.nome)}</strong><small>${escapeHtml(c.setor_responsavel||'-')} · ${c.responsavel_role ? 'Perfil: '+escapeHtml(roleLabel(c.responsavel_role))+' · ' : ''}SLA ${escapeHtml(c.prazo_dias||'-')} dia(s)</small></span>`).join('') || '<p>Nenhuma categoria cadastrada.</p>';
 }
 async function salvarOcorrenciaCategoria(e){
   e.preventDefault(); msg($('ocorrenciasMsg'),'');
-  const payload={nome:$('catNome').value.trim(), setor_responsavel:$('catSetor').value.trim(), responsavel_padrao:$('catResponsavel').value.trim(), prazo_dias:Number($('catPrazo').value||0)};
+  const payload={nome:$('catNome').value.trim(), setor_responsavel:$('catSetor').value.trim(), responsavel_padrao:$('catResponsavel').value.trim(), responsavel_role:($('catRole')?.value||'').trim(), prazo_dias:Number($('catPrazo').value||0)};
   if(!payload.nome || !payload.setor_responsavel || !payload.prazo_dias) return msg($('ocorrenciasMsg'),'Preencha categoria, setor e prazo.', 'error');
   try{ await apiPost('/api/ocorrencia-categorias', payload); e.target.reset(); await carregarOcorrenciaCategorias(); msg($('ocorrenciasMsg'),'Categoria salva com sucesso.', 'ok'); }
   catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao salvar categoria.', 'error'); }
 }
 async function carregarOcorrencias(){
-  if(!profile || profile.role !== 'admin') return;
+  if(!profile || !isInternalRole()) return;
   try{ if(!ocorrenciaCategorias.length) await carregarOcorrenciaCategorias(); ocorrencias = await apiGet('/api/ocorrencias'); renderOcorrencias(); }
   catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao carregar ocorrências.', 'error'); }
 }
@@ -703,7 +722,7 @@ async function criarOcorrencia(e){
   e.preventDefault(); msg($('ocorrenciasMsg'),'');
   const categoriaValue = $('ocCategoria').value;
   const cat = ocorrenciaCategorias.find(c=>String(c.id||c.nome)===String(categoriaValue));
-  const payload={condominio_id:$('ocCond').value, unidade:$('ocUnidade').value.trim(), solicitante:$('ocSolicitante').value.trim(), categoria_id:cat?.id||null, categoria_nome:cat?.nome || categoriaValue, responsavel_setor:cat?.setor_responsavel || '', responsavel_nome:cat?.responsavel_padrao || '', prioridade:$('ocPrioridade').value, descricao:$('ocDescricao').value.trim()};
+  const payload={condominio_id:$('ocCond').value, unidade:$('ocUnidade').value.trim(), solicitante:$('ocSolicitante').value.trim(), categoria_id:cat?.id||null, categoria_nome:cat?.nome || categoriaValue, responsavel_setor:cat?.setor_responsavel || '', responsavel_nome:cat?.responsavel_padrao || '', responsavel_role:cat?.responsavel_role || normalizeRole(cat?.setor_responsavel || ''), prioridade:$('ocPrioridade').value, descricao:$('ocDescricao').value.trim()};
   if(!payload.condominio_id || !payload.solicitante || !payload.categoria_nome || !payload.descricao) return msg($('ocorrenciasMsg'),'Preencha condomínio, solicitante, categoria e descrição.', 'error');
   try{
     const files=[...($('ocAnexos')?.files||[])];
@@ -712,8 +731,36 @@ async function criarOcorrencia(e){
     await apiPost('/api/ocorrencias', payload); e.target.reset(); $('ocAnexosNome').textContent='Nenhum arquivo selecionado'; await carregarOcorrencias(); msg($('ocorrenciasMsg'),'Ocorrência registrada com sucesso.', 'ok');
   }catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao registrar ocorrência.', 'error'); }
 }
+async function criarOcorrenciaMorador(e){
+  e.preventDefault();
+  msg($("residentOcMsg"), "");
+  try{
+    const categoriaId=$("residentOcCategoria")?.value || "";
+    const cat=ocorrenciaCategorias.find(c=>String(c.id)===String(categoriaId));
+    const payload={
+      condominio_id: profile?.condominio_id || "",
+      unidade: profile?.unidade || "",
+      solicitante: profile?.nome || currentUser?.email || "Morador",
+      solicitante_tipo: "Morador",
+      categoria_id: categoriaId || null,
+      categoria_nome: cat?.nome || "Administrativo",
+      responsavel_setor: cat?.setor_responsavel || "Administrativo",
+      responsavel_nome: cat?.responsavel_padrao || "",
+      prioridade: $("residentOcPrioridade")?.value || "Normal",
+      descricao: $("residentOcDescricao")?.value?.trim() || ""
+    };
+    if(!payload.descricao) return msg($("residentOcMsg"), "Descreva a solicitação.", "error");
+    await apiPost('/api/ocorrencias', payload);
+    e.target.reset();
+    msg($("residentOcMsg"), "Ocorrência registrada com sucesso. A administração poderá acompanhar pelo painel.", "ok");
+  }catch(error){ msg($("residentOcMsg"), error.message || "Erro ao registrar ocorrência.", "error"); }
+}
+
 function renderOcorrencias(){
   const box=$('ocorrenciasLista'); if(!box) return;
+  const isSetor = isInternalRole() && normalizeRole(profile?.role) !== "admin" && normalizeRole(profile?.role) !== "portaria";
+  $("formOcorrencia")?.classList.toggle("hidden", isSetor);
+  $("formOcCategoria")?.classList.toggle("hidden", normalizeRole(profile?.role) !== "admin");
   const cond=$('ocFiltroCond')?.value || ''; const status=$('ocFiltroStatus')?.value || ''; const busca=($('ocFiltroBusca')?.value||'').toLowerCase().trim();
   let lista=[...ocorrencias];
   if(cond) lista=lista.filter(o=>String(o.condominio_id)===cond);

@@ -268,3 +268,31 @@ on conflict (nome) do update set
 -- )
 -- order by table_name;
 -- ============================================================
+
+-- ============================================================
+-- 9. ATUALIZAÇÃO COMERCIAL - SETORES INTERNOS E MORADOR
+-- ============================================================
+-- Esta parte pode ser executada por cima do SQL anterior.
+-- Não apaga nem altera dados antigos; apenas adiciona colunas de compatibilidade.
+
+alter table public.ocorrencia_categorias
+  add column if not exists responsavel_role text;
+
+alter table public.ocorrencias
+  add column if not exists responsavel_role text;
+
+create index if not exists idx_ocorrencia_categorias_responsavel_role
+  on public.ocorrencia_categorias(responsavel_role);
+
+create index if not exists idx_ocorrencias_responsavel_role
+  on public.ocorrencias(responsavel_role);
+
+-- Normaliza categorias antigas que ainda não tinham perfil responsável.
+-- Mantém valores simples, sem depender da extensão unaccent.
+update public.ocorrencia_categorias
+set responsavel_role = lower(coalesce(responsavel_role, setor_responsavel, nome))
+where responsavel_role is null;
+
+update public.ocorrencia_categorias set responsavel_role = 'juridico' where lower(responsavel_role) in ('jurídico','juridico');
+update public.ocorrencia_categorias set responsavel_role = 'manutencao' where lower(responsavel_role) in ('manutenção','manutencao');
+update public.ocorrencia_categorias set responsavel_role = 'seguranca' where lower(responsavel_role) in ('segurança','seguranca');
