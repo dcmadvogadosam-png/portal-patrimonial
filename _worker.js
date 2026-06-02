@@ -834,6 +834,128 @@ async function handleDeleteMensagem(request, env) {
   }
 }
 
+
+function addDaysIso(days){
+  const d = new Date();
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().slice(0,10);
+}
+async function nextOcorrenciaNumero(env){
+  const res = await supabaseFetch(env, `/rest/v1/ocorrencias?select=numero_ocorrencia&order=created_at.desc&limit=1`, { method: "GET" });
+  const rows = await readJsonSafe(res);
+  let n = 0;
+  if(Array.isArray(rows) && rows[0]?.numero_ocorrencia){
+    const m = String(rows[0].numero_ocorrencia).match(/(\d+)/);
+    if(m) n = Number(m[1] || 0);
+  }
+  return `OC-${String(n + 1).padStart(4, "0")}`;
+}
+async function handleOcorrenciaCategorias(request, env){
+  try{
+    if (request.method === "OPTIONS") return json({ ok: true });
+    const missing = requiredEnv(env); if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const auth = await assertAuthenticatedProfile(env, request); if(!auth.ok) return auth.response;
+    const role = String(auth.profile.role || "").toLowerCase();
+    if(request.method === "GET"){
+      const res = await supabaseFetch(env, `/rest/v1/ocorrencia_categorias?ativo=eq.true&select=*&order=nome.asc`, { method:"GET" });
+      const data = await readJsonSafe(res);
+      if(!res.ok) return json({ error:data?.message||data?.error||data?.raw||"Erro ao listar categorias.", detalhe:data }, res.status);
+      return json({ ok:true, data:Array.isArray(data)?data:[] });
+    }
+    if(request.method !== "POST") return json({ error:"Método não permitido." },405);
+    if(role !== "admin") return json({ error:"Apenas administrador pode cadastrar categorias." },403);
+    const body = await request.json().catch(()=>null);
+    const payload = { nome:String(body?.nome||"").trim(), setor_responsavel:String(body?.setor_responsavel||"").trim(), responsavel_padrao:String(body?.responsavel_padrao||"").trim(), prazo_dias:Number(body?.prazo_dias||0), ativo:true };
+    if(!payload.nome || !payload.setor_responsavel || !payload.prazo_dias) return json({ error:"Preencha categoria, setor responsável e prazo." },400);
+    const res = await supabaseFetch(env, `/rest/v1/ocorrencia_categorias`, { method:"POST", body:JSON.stringify(payload) });
+    const data = await readJsonSafe(res);
+    if(!res.ok) return json({ error:data?.message||data?.error||data?.raw||"Erro ao salvar categoria.", detalhe:data }, res.status);
+    return json({ ok:true, data:Array.isArray(data)?data[0]:data });
+  }catch(err){ return json({ error:err?.message||"Erro interno nas categorias de ocorrência." },500); }
+}
+async function handleOcorrencias(request, env){
+  try{
+    if (request.method === "OPTIONS") return json({ ok: true });
+    const missing = requiredEnv(env); if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const auth = await assertAuthenticatedProfile(env, request); if(!auth.ok) return auth.response;
+    const role = String(auth.profile.role || "").toLowerCase();
+    if(request.method === "GET"){
+      let path = `/rest/v1/ocorrencias?select=*&order=created_at.desc`;
+      if(role !== "admin"){
+        if(!auth.profile.condominio_id) return json({ error:"Usuário sem condomínio vinculado." },400);
+        path = `/rest/v1/ocorrencias?condominio_id=eq.${encodeURIComponent(auth.profile.condominio_id)}&select=*&order=created_at.desc`;
+      }
+      const res = await supabaseFetch(env, path, { method:"GET" });
+      const data = await readJsonSafe(res);
+      if(!res.ok) return json({ error:data?.message||data?.error||data?.raw||"Erro ao listar ocorrências.", detalhe:data }, res.status);
+      return json({ ok:true, data:Array.isArray(data)?data:[] });
+    }
+    if(request.method !== "POST") return json({ error:"Método não permitido." },405);
+    if(role !== "admin") return json({ error:"Apenas administrador pode criar ocorrência nesta versão." },403);
+    const body = await request.json().catch(()=>null);
+    const payload = { condominio_id:String(body?.condominio_id||"").trim(), unidade:String(body?.unidade||"").trim(), solicitante:String(body?.solicitante||"").trim(), categoria_id:body?.categoria_id || null, categoria_nome:String(body?.categoria_nome||"").trim(), responsavel_setor:String(body?.responsavel_setor||"").trim(), responsavel_nome:String(body?.responsavel_nome||"").trim(), prioridade:String(body?.prioridade||"Normal").trim(), descricao:String(body?.descricao||"").trim(), status:"Aberta", created_by:auth.user.id };
+    if(!payload.condominio_id || !payload.solicitante || !payload.categoria_nome || !payload.descricao) return json({ error:"Preencha condomínio, solicitante, categoria e descrição." },400);
+    let prazoDias = 3;
+    if(payload.categoria_id){
+      const catRes = await supabaseFetch(env, `/rest/v1/ocorrencia_categorias?id=eq.${encodeURIComponent(payload.categoria_id)}&select=*&limit=1`, { method:"GET" });
+      const cats = await readJsonSafe(catRes); const cat = Array.isArray(cats)?cats[0]:null;
+      if(cat){ prazoDias = Number(cat.prazo_dias||prazoDias); payload.responsavel_setor = payload.responsavel_setor || cat.setor_responsavel || ""; payload.responsavel_nome = payload.responsavel_nome || cat.responsavel_padrao || ""; }
+    }
+    payload.numero_ocorrencia = await nextOcorrenciaNumero(env);
+    payload.data_prazo = addDaysIso(prazoDias);
+    const res = await supabaseFetch(env, `/rest/v1/ocorrencias`, { method:"POST", body:JSON.stringify(payload) });
+    const data = await readJsonSafe(res);
+    if(!res.ok) return json({ error:data?.message||data?.error||data?.raw||"Erro ao criar ocorrência.", detalhe:data }, res.status);
+    const oc = Array.isArray(data)?data[0]:data;
+    await supabaseFetch(env, `/rest/v1/ocorrencia_historico`, { method:"POST", body:JSON.stringify({ ocorrencia_id:oc.id, usuario_id:auth.user.id, usuario_nome:auth.profile.nome||auth.profile.email, acao:"Ocorrência aberta", status_novo:"Aberta", comentario:"Ocorrência registrada no sistema." }) });
+    const anexos = Array.isArray(body?.anexos)?body.anexos:[];
+    for(const a of anexos){
+      if(a?.url_arquivo) await supabaseFetch(env, `/rest/v1/ocorrencia_anexos`, { method:"POST", body:JSON.stringify({ ocorrencia_id:oc.id, nome_arquivo:String(a.nome_arquivo||"Anexo"), url_arquivo:String(a.url_arquivo), tipo_arquivo:String(a.tipo_arquivo||""), enviado_por:auth.user.id }) }).catch(()=>null);
+    }
+    return json({ ok:true, data:oc });
+  }catch(err){ return json({ error:err?.message||"Erro interno nas ocorrências." },500); }
+}
+async function handleOcorrenciaDetail(request, env, id){
+  try{
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "GET") return json({ error:"Método não permitido." },405);
+    const missing = requiredEnv(env); if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const auth = await assertAuthenticatedProfile(env, request); if(!auth.ok) return auth.response;
+    const ocRes = await supabaseFetch(env, `/rest/v1/ocorrencias?id=eq.${encodeURIComponent(id)}&select=*&limit=1`, { method:"GET" });
+    const ocRows = await readJsonSafe(ocRes); const oc = Array.isArray(ocRows)?ocRows[0]:null;
+    if(!oc) return json({ error:"Ocorrência não encontrada." },404);
+    if(String(auth.profile.role||"").toLowerCase() !== "admin" && String(oc.condominio_id) !== String(auth.profile.condominio_id)) return json({ error:"Sem permissão para esta ocorrência." },403);
+    const [hRes,cRes,aRes] = await Promise.all([
+      supabaseFetch(env, `/rest/v1/ocorrencia_historico?ocorrencia_id=eq.${encodeURIComponent(id)}&select=*&order=created_at.asc`, { method:"GET" }),
+      supabaseFetch(env, `/rest/v1/ocorrencia_comentarios?ocorrencia_id=eq.${encodeURIComponent(id)}&select=*&order=created_at.asc`, { method:"GET" }),
+      supabaseFetch(env, `/rest/v1/ocorrencia_anexos?ocorrencia_id=eq.${encodeURIComponent(id)}&select=*&order=created_at.asc`, { method:"GET" })
+    ]);
+    return json({ ok:true, data:{ ocorrencia:oc, historico:await readJsonSafe(hRes), comentarios:await readJsonSafe(cRes), anexos:await readJsonSafe(aRes) } });
+  }catch(err){ return json({ error:err?.message||"Erro interno ao detalhar ocorrência." },500); }
+}
+async function handleOcorrenciaStatus(request, env, id){
+  try{
+    if (request.method === "OPTIONS") return json({ ok: true });
+    if (request.method !== "POST" && request.method !== "PATCH") return json({ error:"Método não permitido." },405);
+    const missing = requiredEnv(env); if (missing.length) return json({ error: `Variáveis ausentes no Cloudflare: ${missing.join(", ")}` }, 500);
+    const auth = await assertAuthenticatedProfile(env, request); if(!auth.ok) return auth.response;
+    if(String(auth.profile.role||"").toLowerCase() !== "admin") return json({ error:"Apenas administrador pode atualizar ocorrência." },403);
+    const body = await request.json().catch(()=>null); const status=String(body?.status||"").trim(); const comentario=String(body?.comentario||"").trim();
+    if(!status) return json({ error:"Informe o novo status." },400);
+    const oldRes = await supabaseFetch(env, `/rest/v1/ocorrencias?id=eq.${encodeURIComponent(id)}&select=*&limit=1`, { method:"GET" });
+    const oldRows = await readJsonSafe(oldRes); const old = Array.isArray(oldRows)?oldRows[0]:null;
+    if(!old) return json({ error:"Ocorrência não encontrada." },404);
+    const patch={ status, updated_at:new Date().toISOString() };
+    if(status === "Concluída") patch.data_conclusao = new Date().toISOString();
+    const res = await supabaseFetch(env, `/rest/v1/ocorrencias?id=eq.${encodeURIComponent(id)}`, { method:"PATCH", body:JSON.stringify(patch) });
+    const data = await readJsonSafe(res);
+    if(!res.ok) return json({ error:data?.message||data?.error||data?.raw||"Erro ao atualizar ocorrência.", detalhe:data }, res.status);
+    await supabaseFetch(env, `/rest/v1/ocorrencia_historico`, { method:"POST", body:JSON.stringify({ ocorrencia_id:id, usuario_id:auth.user.id, usuario_nome:auth.profile.nome||auth.profile.email, acao:"Status alterado", status_anterior:old.status, status_novo:status, comentario }) });
+    if(comentario) await supabaseFetch(env, `/rest/v1/ocorrencia_comentarios`, { method:"POST", body:JSON.stringify({ ocorrencia_id:id, usuario_id:auth.user.id, usuario_nome:auth.profile.nome||auth.profile.email, comentario, tipo:"interno" }) });
+    return json({ ok:true, data:Array.isArray(data)?data[0]:data });
+  }catch(err){ return json({ error:err?.message||"Erro interno ao atualizar ocorrência." },500); }
+}
+
 async function handleMe(request, env) {
   try {
     if (request.method === "OPTIONS") return json({ ok: true });
@@ -888,6 +1010,13 @@ export default {
     if (url.pathname === "/api/send-mensagem") return handleSendMensagem(request, env);
     if (url.pathname === "/api/reply-mensagem") return handleReplyMensagem(request, env);
     if (url.pathname === "/api/delete-mensagem") return handleDeleteMensagem(request, env);
+
+    if (url.pathname === "/api/ocorrencia-categorias") return handleOcorrenciaCategorias(request, env);
+    if (url.pathname === "/api/ocorrencias") return handleOcorrencias(request, env);
+    const ocorrenciaStatusMatch = url.pathname.match(/^\/api\/ocorrencias\/([^/]+)\/status$/);
+    if (ocorrenciaStatusMatch) return handleOcorrenciaStatus(request, env, decodeURIComponent(ocorrenciaStatusMatch[1]));
+    const ocorrenciaDetailMatch = url.pathname.match(/^\/api\/ocorrencias\/([^/]+)$/);
+    if (ocorrenciaDetailMatch) return handleOcorrenciaDetail(request, env, decodeURIComponent(ocorrenciaDetailMatch[1]));
     if (url.pathname === "/api/create-user") return handleCreateUser(request, env);
     if (url.pathname === "/api/create-portaria") return handleCreatePortaria(request, env);
     if (url.pathname === "/api/update-portaria") return handleUpdatePortaria(request, env);
@@ -901,8 +1030,8 @@ export default {
         missing,
         mode: "worker-assets",
         version: "corrigido-rotas-listagem-2026-05-22",
-        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/save-lancamento", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password", "/api/list-mensagens", "/api/send-mensagem", "/api/reply-mensagem", "/api/delete-mensagem"],
-        database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "mensagens_moradores", "anexos", "storage.documentos"]
+        routes: ["/api/me", "/api/list-moradores", "/api/list-lancamentos", "/api/save-lancamento", "/api/list-portarias", "/api/create-user", "/api/create-portaria", "/api/update-portaria", "/api/delete-portaria", "/api/delete-user", "/api/update-password", "/api/list-mensagens", "/api/send-mensagem", "/api/reply-mensagem", "/api/delete-mensagem", "/api/ocorrencias", "/api/ocorrencia-categorias"],
+        database_required: ["condominios", "profiles", "portaria_logins", "lancamentos", "mensagens_moradores", "ocorrencias", "ocorrencia_categorias", "ocorrencia_historico", "ocorrencia_comentarios", "ocorrencia_anexos", "anexos", "storage.documentos"]
       }, missing.length ? 500 : 200);
     }
 

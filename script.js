@@ -16,6 +16,9 @@ let portarias = [];
 let whatsappMoradorAtual = null;
 let mensagens = [];
 let conversaMoradorSelecionado = null;
+let ocorrencias = [];
+let ocorrenciaCategorias = [];
+let ocorrenciaSelecionada = null;
 
 function msg(el, text, type = "") { if (el) { el.textContent = text || ""; el.className = `message ${type}`; } }
 function show(el) { el?.classList.remove("hidden"); }
@@ -89,6 +92,15 @@ function bindBasicEvents() {
   $("backupJsonUpload")?.addEventListener("change", importarBackupJson);
   $("lanAnexo")?.addEventListener("change", (e) => { $("lanAnexoNome").textContent = e.target.files?.[0]?.name || "Nenhum arquivo selecionado"; });
   $("moradorFotoPlaca")?.addEventListener("change", (e) => { $("moradorFotoPlacaNome").textContent = e.target.files?.[0]?.name || "Nenhuma imagem selecionada"; });
+  $("formOcorrencia")?.addEventListener("submit", criarOcorrencia);
+  $("formOcCategoria")?.addEventListener("submit", salvarOcorrenciaCategoria);
+  $("atualizarOcorrenciasBtn")?.addEventListener("click", carregarOcorrencias);
+  $("ocFiltroCond")?.addEventListener("change", renderOcorrencias);
+  $("ocFiltroStatus")?.addEventListener("change", renderOcorrencias);
+  $("ocFiltroBusca")?.addEventListener("input", renderOcorrencias);
+  $("ocAnexos")?.addEventListener("change", (e) => { const n=e.target.files?.length||0; $("ocAnexosNome").textContent = n ? `${n} arquivo(s) selecionado(s)` : "Nenhum arquivo selecionado"; });
+  $("closeOcorrenciaModal")?.addEventListener("click", () => hide($("ocorrenciaModal")));
+  $("ocorrenciaModal")?.addEventListener("click", (e) => { if(e.target?.id === "ocorrenciaModal") hide($("ocorrenciaModal")); });
   document.querySelectorAll("[data-admin-tab]").forEach(btn => btn.addEventListener("click", () => setAdminTab(btn.dataset.adminTab)));
 }
 
@@ -104,6 +116,7 @@ function setAdminTab(tab){
   document.querySelectorAll("[data-admin-tab]").forEach(b => b.classList.toggle("active", b.dataset.adminTab === tab));
   document.querySelectorAll("[data-panel]").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== tab));
   $("adminSidebar")?.classList.remove("open");
+  if(tab === "ocorrencias") carregarOcorrencias();
 }
 
 async function init() {
@@ -127,7 +140,7 @@ async function carregarCondominios() {
 
 function popularSelects() {
   const options = `<option value="">Selecione o condomínio</option>` + condominios.map(c => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("");
-  ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio","mensagensCondominio"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
+  ["loginCondominio","portariaLoginCondominio","moradorCondominio","lanCondominio","removerCondominio","senhaCondominio","portariaCondominio","gestaoPortariaCondominio","mensagensCondominio","ocCond","ocFiltroCond"].forEach(id => { const el=$(id); if(el) el.innerHTML=options; });
 }
 
 async function loginMorador() {
@@ -230,7 +243,7 @@ async function abrirDashboard() {
   $("condominioTitulo").textContent = condominio?.nome || "Condomínio";
   if (isPortaria) { await carregarMoradoresPortaria(); renderResumo(); return; }
   await carregarLancamentos();
-  if (isAdmin) { await carregarMoradores(); await carregarPortarias(); await carregarMensagensAdmin(false); }
+  if (isAdmin) { await carregarMoradores(); await carregarPortarias(); await carregarMensagensAdmin(false); await carregarOcorrenciaCategorias(); }
   if (!isAdmin && !isPortaria) { show($("residentCommsSection")); await carregarMensagensMorador(); }
   renderResumo(); if(isAdmin) setAdminTab("condominios");
 }
@@ -629,6 +642,113 @@ async function responderMensagemMorador(){
   }catch(error){
     msg($("mensagensAdminMsg"), error.message || "Erro ao responder mensagem.", "error");
   }
+}
+
+
+function diasEntreDatas(a, b){
+  if(!a || !b) return 0;
+  const d1 = new Date(String(a).slice(0,10) + 'T00:00:00');
+  const d2 = new Date(String(b).slice(0,10) + 'T00:00:00');
+  return Math.max(0, Math.round((d2-d1)/(1000*60*60*24)));
+}
+function prazoBadge(oc){
+  if(["Concluída","Cancelada"].includes(oc.status)) return `<span class="sla-badge ok">Finalizada</span>`;
+  if(!oc.data_prazo) return `<span class="sla-badge">Sem prazo</span>`;
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const prazo = new Date(String(oc.data_prazo).slice(0,10)+'T00:00:00');
+  const diff = Math.ceil((prazo-hoje)/(1000*60*60*24));
+  if(diff < 0) return `<span class="sla-badge late">Vencida há ${Math.abs(diff)} dia(s)</span>`;
+  if(diff <= 1) return `<span class="sla-badge warn">Vence ${diff===0?'hoje':'amanhã'}</span>`;
+  return `<span class="sla-badge ok">${diff} dia(s) restantes</span>`;
+}
+async function carregarOcorrenciaCategorias(){
+  try{
+    ocorrenciaCategorias = await apiGet('/api/ocorrencia-categorias');
+    if(!ocorrenciaCategorias.length){
+      ocorrenciaCategorias = [
+        {nome:'Engenharia', setor_responsavel:'Engenharia', responsavel_padrao:'', prazo_dias:5},
+        {nome:'Manutenção', setor_responsavel:'Manutenção', responsavel_padrao:'', prazo_dias:3},
+        {nome:'Financeiro', setor_responsavel:'Financeiro', responsavel_padrao:'', prazo_dias:2},
+        {nome:'Jurídico', setor_responsavel:'Jurídico', responsavel_padrao:'', prazo_dias:10},
+        {nome:'Administrativo', setor_responsavel:'Administrativo', responsavel_padrao:'', prazo_dias:3},
+        {nome:'Segurança', setor_responsavel:'Segurança', responsavel_padrao:'', prazo_dias:2},
+        {nome:'Limpeza', setor_responsavel:'Limpeza', responsavel_padrao:'', prazo_dias:2},
+        {nome:'Portaria', setor_responsavel:'Portaria', responsavel_padrao:'', prazo_dias:2},
+        {nome:'Obras', setor_responsavel:'Engenharia', responsavel_padrao:'', prazo_dias:5},
+        {nome:'Prestadores de Serviço', setor_responsavel:'Administrativo', responsavel_padrao:'', prazo_dias:4},
+        {nome:'Outros', setor_responsavel:'Administrativo', responsavel_padrao:'', prazo_dias:3}
+      ];
+    }
+  }catch(e){ console.warn(e); ocorrenciaCategorias=[]; }
+  popularOcorrenciaCategorias();
+}
+function popularOcorrenciaCategorias(){
+  const opts = `<option value="">Selecione a categoria</option>` + ocorrenciaCategorias.map(c=>`<option value="${escapeHtml(c.id || c.nome)}">${escapeHtml(c.nome)}${c.prazo_dias?` · ${c.prazo_dias} dias`:''}</option>`).join('');
+  if($('ocCategoria')) $('ocCategoria').innerHTML = opts;
+  if($('categoriasLista')) $('categoriasLista').innerHTML = ocorrenciaCategorias.map(c=>`<span><strong>${escapeHtml(c.nome)}</strong><small>${escapeHtml(c.setor_responsavel||'-')} · SLA ${escapeHtml(c.prazo_dias||'-')} dia(s)</small></span>`).join('') || '<p>Nenhuma categoria cadastrada.</p>';
+}
+async function salvarOcorrenciaCategoria(e){
+  e.preventDefault(); msg($('ocorrenciasMsg'),'');
+  const payload={nome:$('catNome').value.trim(), setor_responsavel:$('catSetor').value.trim(), responsavel_padrao:$('catResponsavel').value.trim(), prazo_dias:Number($('catPrazo').value||0)};
+  if(!payload.nome || !payload.setor_responsavel || !payload.prazo_dias) return msg($('ocorrenciasMsg'),'Preencha categoria, setor e prazo.', 'error');
+  try{ await apiPost('/api/ocorrencia-categorias', payload); e.target.reset(); await carregarOcorrenciaCategorias(); msg($('ocorrenciasMsg'),'Categoria salva com sucesso.', 'ok'); }
+  catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao salvar categoria.', 'error'); }
+}
+async function carregarOcorrencias(){
+  if(!profile || profile.role !== 'admin') return;
+  try{ if(!ocorrenciaCategorias.length) await carregarOcorrenciaCategorias(); ocorrencias = await apiGet('/api/ocorrencias'); renderOcorrencias(); }
+  catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao carregar ocorrências.', 'error'); }
+}
+async function criarOcorrencia(e){
+  e.preventDefault(); msg($('ocorrenciasMsg'),'');
+  const categoriaValue = $('ocCategoria').value;
+  const cat = ocorrenciaCategorias.find(c=>String(c.id||c.nome)===String(categoriaValue));
+  const payload={condominio_id:$('ocCond').value, unidade:$('ocUnidade').value.trim(), solicitante:$('ocSolicitante').value.trim(), categoria_id:cat?.id||null, categoria_nome:cat?.nome || categoriaValue, responsavel_setor:cat?.setor_responsavel || '', responsavel_nome:cat?.responsavel_padrao || '', prioridade:$('ocPrioridade').value, descricao:$('ocDescricao').value.trim()};
+  if(!payload.condominio_id || !payload.solicitante || !payload.categoria_nome || !payload.descricao) return msg($('ocorrenciasMsg'),'Preencha condomínio, solicitante, categoria e descrição.', 'error');
+  try{
+    const files=[...($('ocAnexos')?.files||[])];
+    payload.anexos=[];
+    for(const file of files){ const url=await uploadFile(file, `ocorrencias/${payload.condominio_id}`); if(url) payload.anexos.push({nome_arquivo:file.name, tipo_arquivo:file.type, url_arquivo:url}); }
+    await apiPost('/api/ocorrencias', payload); e.target.reset(); $('ocAnexosNome').textContent='Nenhum arquivo selecionado'; await carregarOcorrencias(); msg($('ocorrenciasMsg'),'Ocorrência registrada com sucesso.', 'ok');
+  }catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao registrar ocorrência.', 'error'); }
+}
+function renderOcorrencias(){
+  const box=$('ocorrenciasLista'); if(!box) return;
+  const cond=$('ocFiltroCond')?.value || ''; const status=$('ocFiltroStatus')?.value || ''; const busca=($('ocFiltroBusca')?.value||'').toLowerCase().trim();
+  let lista=[...ocorrencias];
+  if(cond) lista=lista.filter(o=>String(o.condominio_id)===cond);
+  if(status) lista=lista.filter(o=>String(o.status)===status);
+  if(busca) lista=lista.filter(o=>[o.numero_ocorrencia,o.solicitante,o.categoria_nome,o.responsavel_setor,o.descricao,o.unidade].join(' ').toLowerCase().includes(busca));
+  const abertas=ocorrencias.filter(o=>!['Concluída','Cancelada'].includes(o.status)).length;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const vencidas=ocorrencias.filter(o=>!['Concluída','Cancelada'].includes(o.status) && o.data_prazo && new Date(String(o.data_prazo).slice(0,10)+'T00:00:00') < hoje).length;
+  const concluidas=ocorrencias.filter(o=>o.status==='Concluída').length;
+  const tempos=ocorrencias.filter(o=>o.status==='Concluída' && o.data_conclusao).map(o=>diasEntreDatas(o.created_at, o.data_conclusao));
+  if($('occMetricAbertas')) $('occMetricAbertas').textContent=abertas;
+  if($('occMetricVencidas')) $('occMetricVencidas').textContent=vencidas;
+  if($('occMetricConcluidas')) $('occMetricConcluidas').textContent=concluidas;
+  if($('occMetricTempoMedio')) $('occMetricTempoMedio').textContent=(tempos.length ? Math.round(tempos.reduce((a,b)=>a+b,0)/tempos.length) : 0) + ' dias';
+  box.innerHTML = lista.map(o=>{
+    const condNome=condominios.find(c=>String(c.id)===String(o.condominio_id))?.nome || 'Condomínio';
+    return `<article class="occurrence-card" onclick="abrirOcorrencia('${escapeHtml(o.id)}')"><div><strong>${escapeHtml(o.numero_ocorrencia||'OC')}</strong><span>${escapeHtml(condNome)}${o.unidade?` · Unidade ${escapeHtml(o.unidade)}`:''}</span></div><h4>${escapeHtml(o.categoria_nome||'Categoria')} · ${escapeHtml(o.solicitante||'Solicitante')}</h4><p>${escapeHtml(o.descricao||'').slice(0,160)}${String(o.descricao||'').length>160?'...':''}</p><footer><span class="status-pill">${escapeHtml(o.status||'Aberta')}</span>${prazoBadge(o)}<small>${formatDate(String(o.created_at||'').slice(0,10))}</small></footer></article>`;
+  }).join('') || '<p>Nenhuma ocorrência encontrada.</p>';
+}
+window.abrirOcorrencia = async function(id){
+  ocorrenciaSelecionada = ocorrencias.find(o=>String(o.id)===String(id));
+  if(!ocorrenciaSelecionada) return;
+  try{
+    const data = await apiGet(`/api/ocorrencias/${encodeURIComponent(id)}`);
+    const oc = data.ocorrencia || ocorrenciaSelecionada; const historico=data.historico||[]; const comentarios=data.comentarios||[]; const anexos=data.anexos||[];
+    const condNome=condominios.find(c=>String(c.id)===String(oc.condominio_id))?.nome || 'Condomínio';
+    $('ocorrenciaDetalhe').innerHTML = `<span class="pill">${escapeHtml(oc.numero_ocorrencia||'Ocorrência')}</span><h2>${escapeHtml(oc.categoria_nome||'Ocorrência')}</h2><p><strong>Condomínio:</strong> ${escapeHtml(condNome)} ${oc.unidade?` · <strong>Unidade:</strong> ${escapeHtml(oc.unidade)}`:''}</p><p><strong>Solicitante:</strong> ${escapeHtml(oc.solicitante||'-')} · <strong>Responsável:</strong> ${escapeHtml(oc.responsavel_setor||'-')}</p><p><strong>Descrição:</strong><br>${escapeHtml(oc.descricao||'')}</p><div class="occurrence-status-update"><select id="ocNovoStatus"><option>Aberta</option><option>Em análise</option><option>Em execução</option><option>Aguardando terceiros</option><option>Aguardando aprovação</option><option>Concluída</option><option>Cancelada</option></select><textarea id="ocComentario" placeholder="Comentário, providência adotada ou justificativa"></textarea><button class="btn btn-primary" type="button" onclick="atualizarOcorrenciaStatus()">Salvar movimentação</button></div><h3>Anexos</h3><div class="attachment-list">${anexos.map(a=>`<a href="${escapeHtml(a.url_arquivo)}" target="_blank">📎 ${escapeHtml(a.nome_arquivo||'Anexo')}</a>`).join('') || '<p>Nenhum anexo.</p>'}</div><h3>Histórico</h3><div class="history-list">${historico.map(h=>`<article><strong>${escapeHtml(h.acao||'Movimentação')}</strong><span>${formatDate(String(h.created_at||'').slice(0,10))}</span><p>${escapeHtml(h.comentario||'')}</p></article>`).join('') || '<p>Nenhum histórico.</p>'}</div><h3>Comentários internos</h3><div class="history-list">${comentarios.map(c=>`<article><strong>${escapeHtml(c.usuario_nome||'Usuário')}</strong><span>${formatDate(String(c.created_at||'').slice(0,10))}</span><p>${escapeHtml(c.comentario||'')}</p></article>`).join('') || '<p>Nenhum comentário.</p>'}</div>`;
+    $('ocNovoStatus').value = oc.status || 'Aberta'; show($('ocorrenciaModal'));
+  }catch(error){ msg($('ocorrenciasMsg'), error.message || 'Erro ao abrir ocorrência.', 'error'); }
+}
+window.atualizarOcorrenciaStatus = async function(){
+  if(!ocorrenciaSelecionada) return;
+  const status=$('ocNovoStatus').value; const comentario=$('ocComentario').value.trim();
+  try{ await apiPost(`/api/ocorrencias/${encodeURIComponent(ocorrenciaSelecionada.id)}/status`, {status, comentario}); hide($('ocorrenciaModal')); await carregarOcorrencias(); msg($('ocorrenciasMsg'), 'Movimentação salva com sucesso.', 'ok'); }
+  catch(error){ alert(error.message || 'Erro ao atualizar ocorrência.'); }
 }
 
 async function uploadFile(file, folder){ if(!file) return null; const ext=file.name.split('.').pop(); const path=`${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`; const {error}=await supabaseClient.storage.from("documentos").upload(path,file,{upsert:false}); if(error){console.warn(error); return null;} const {data}=supabaseClient.storage.from("documentos").getPublicUrl(path); return data?.publicUrl || null; }

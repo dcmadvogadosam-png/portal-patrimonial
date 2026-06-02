@@ -99,6 +99,7 @@
           <button class="nav-item" data-admin-tab="relatorios" type="button">📄 <span>Relatórios e Backup</span></button>
           <button class="nav-item" data-admin-tab="lancamentos" type="button">💰 <span>Lançamentos</span></button>
           <button class="nav-item" data-admin-tab="mensagens" type="button">💬 <span>Mensagens dos moradores</span></button>
+          <button class="nav-item" data-admin-tab="ocorrencias" type="button">📌 <span>Ocorrências e Demandas</span></button>
           <button class="nav-item" data-admin-tab="remocoes" type="button">🗑️ <span>Remoções</span></button>
         </nav>
 
@@ -284,6 +285,55 @@
             </div>
           </section>
 
+
+          <section class="module-card admin-tab-panel hidden" data-panel="ocorrencias">
+            <div class="module-head">
+              <div><h2>📌 Central de Ocorrências e Demandas</h2><p>Registre, encaminhe, acompanhe SLA e mantenha histórico completo das demandas dos condomínios.</p></div>
+              <div class="occurrence-actions"><button id="atualizarOcorrenciasBtn" class="btn btn-secondary" type="button">Atualizar</button></div>
+            </div>
+
+            <div class="occurrence-dashboard">
+              <article><span>Abertas</span><strong id="occMetricAbertas">0</strong></article>
+              <article><span>Vencidas</span><strong id="occMetricVencidas">0</strong></article>
+              <article><span>Concluídas</span><strong id="occMetricConcluidas">0</strong></article>
+              <article><span>Tempo médio</span><strong id="occMetricTempoMedio">0 dias</strong></article>
+            </div>
+
+            <div class="cards-two occurrence-grid">
+              <form id="formOcorrencia" class="action-card accent-blue">
+                <h3><span>＋</span>Nova ocorrência</h3>
+                <select id="ocCond" required></select>
+                <input id="ocUnidade" placeholder="Unidade / apartamento (opcional)" />
+                <input id="ocSolicitante" placeholder="Nome do solicitante" required />
+                <select id="ocCategoria" required></select>
+                <select id="ocPrioridade"><option value="Normal">Prioridade normal</option><option value="Baixa">Baixa</option><option value="Alta">Alta</option><option value="Urgente">Urgente</option></select>
+                <textarea id="ocDescricao" placeholder="Descrição detalhada da demanda" required></textarea>
+                <label class="file-label">Anexos da ocorrência<input id="ocAnexos" type="file" multiple accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx" /></label>
+                <small id="ocAnexosNome">Nenhum arquivo selecionado</small>
+                <button class="btn btn-primary" type="submit">📌 Registrar ocorrência</button>
+              </form>
+
+              <form id="formOcCategoria" class="action-card accent-green">
+                <h3><span>⚙️</span>Categorias e SLA</h3>
+                <input id="catNome" placeholder="Categoria. Ex.: Engenharia" required />
+                <input id="catSetor" placeholder="Setor responsável. Ex.: Engenharia" required />
+                <input id="catResponsavel" placeholder="Responsável padrão (opcional)" />
+                <input id="catPrazo" type="number" min="1" placeholder="Prazo padrão em dias" required />
+                <button class="btn btn-primary" type="submit">Salvar categoria</button>
+                <div id="categoriasLista" class="category-list"></div>
+              </form>
+            </div>
+
+            <div class="table-card occurrence-list-card">
+              <div class="section-row">
+                <h3>Ocorrências cadastradas</h3>
+                <div class="filters occurrence-filters"><select id="ocFiltroCond"></select><select id="ocFiltroStatus"><option value="">Todos os status</option><option>Aberta</option><option>Em análise</option><option>Em execução</option><option>Aguardando terceiros</option><option>Aguardando aprovação</option><option>Concluída</option><option>Cancelada</option></select><input id="ocFiltroBusca" placeholder="Buscar por número, solicitante, categoria..." /></div>
+              </div>
+              <div id="ocorrenciasLista" class="occurrence-list"></div>
+            </div>
+            <p id="ocorrenciasMsg" class="message"></p>
+          </section>
+
           <section class="module-card admin-tab-panel hidden" data-panel="remocoes">
             <div class="module-head"><div><h2>🗑️ Remoções</h2><p>Remova moradores e lançamentos cadastrados no sistema.</p></div></div>
             <div class="cards-two">
@@ -353,6 +403,14 @@
       <textarea id="sindicoDescricao" placeholder="Descreva sua solicitação com detalhes"></textarea>
       <button id="enviarSindicoBtn" class="btn btn-primary full" type="button">Enviar mensagem</button>
       <p id="sindicoMsg" class="message"></p>
+    </div>
+  </div>
+
+
+  <div id="ocorrenciaModal" class="modal hidden">
+    <div class="modal-card occurrence-modal-card">
+      <button id="closeOcorrenciaModal" class="modal-close">×</button>
+      <div id="ocorrenciaDetalhe"></div>
     </div>
   </div>
 
