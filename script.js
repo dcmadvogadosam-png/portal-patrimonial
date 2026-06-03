@@ -57,9 +57,11 @@ function bindBasicEvents() {
   $("tabMorador")?.addEventListener("click", () => switchLoginTab("morador"));
   $("tabAdmin")?.addEventListener("click", () => switchLoginTab("admin"));
   $("tabPortaria")?.addEventListener("click", () => switchLoginTab("portaria"));
+  $("tabEquipe")?.addEventListener("click", () => switchLoginTab("equipe"));
   $("loginBtn")?.addEventListener("click", loginMorador);
   $("adminLoginBtn")?.addEventListener("click", loginAdmin);
   $("portariaLoginBtn")?.addEventListener("click", loginPortaria);
+  $("equipeLoginBtn")?.addEventListener("click", loginEquipe);
   $("logoutBtn")?.addEventListener("click", logout);
   $("printBtn")?.addEventListener("click", () => window.print());
   $("mobileMenuBtn")?.addEventListener("click", () => $("adminSidebar")?.classList.toggle("open"));
@@ -114,9 +116,11 @@ function switchLoginTab(tab){
   $("tabMorador")?.classList.toggle("active", tab === "morador");
   $("tabAdmin")?.classList.toggle("active", tab === "admin");
   $("tabPortaria")?.classList.toggle("active", tab === "portaria");
+  $("tabEquipe")?.classList.toggle("active", tab === "equipe");
   $("moradorLoginBox")?.classList.toggle("hidden", tab !== "morador");
   $("adminLoginBox")?.classList.toggle("hidden", tab !== "admin");
   $("portariaLoginBox")?.classList.toggle("hidden", tab !== "portaria");
+  $("equipeLoginBox")?.classList.toggle("hidden", tab !== "equipe");
 }
 function setAdminTab(tab){
   document.querySelectorAll("[data-admin-tab]").forEach(b => b.classList.toggle("active", b.dataset.adminTab === tab));
@@ -178,6 +182,24 @@ async function loginAdmin() {
   await abrirDashboard();
 }
 
+async function loginEquipe() {
+  msg($("equipeLoginMsg"), "");
+  const email = $("equipeEmail")?.value?.trim();
+  const password = $("equipeSenha")?.value || "";
+  if (!email || !password) return msg($("equipeLoginMsg"), "Informe e-mail e senha da equipe.", "error");
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return msg($("equipeLoginMsg"), "Login inválido: " + error.message, "error");
+  currentUser = data.user;
+  await carregarPerfil();
+  const roleNorm = normalizeRole(profile?.role);
+  const setorPermitido = SECTOR_ROLES.map(normalizeRole).includes(roleNorm);
+  if (!profile || !setorPermitido) {
+    await supabaseClient.auth.signOut();
+    return msg($("equipeLoginMsg"), "Este login não possui permissão de equipe/setor interno.", "error");
+  }
+  await abrirDashboard();
+}
+
 async function loginPortaria() {
   msg($("portariaLoginMsg"), "");
   const email = $("portariaEmail")?.value?.trim(); const password = $("portariaSenha")?.value || ""; const condominioId = $("portariaLoginCondominio")?.value || "";
@@ -208,6 +230,7 @@ async function carregarPerfil() {
         profile = null;
         msg($("loginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
         msg($("adminLoginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
+        msg($("equipeLoginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
         msg($("portariaLoginMsg"), result?.error || "Perfil não encontrado. Verifique a tabela profiles.", "error");
         return;
       }
